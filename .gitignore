@@ -1,0 +1,40 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.history/
+.vscode/
+.idea/
+
+# Logs / caches
+*.log
+*.lnk
+.npm-cache/
+*.tmp
+**/__pycache__/
+**/*.pyc
+tmp_seed_monitor.sql
+tmp-medication-test.jpg
+docs/assets/screenshots/*.log
+
+# Node / frontend
+**/node_modules/
+**/.vite/
+**/coverage/
+**/dist/
+**/target/
+**/.turbo/
+**/.cache/
+**/runtime-data/
+**/.eslintcache
+**/*.tsbuildinfo
+
+# Env files
+**/.env
+!**/.env.example
+!**/.env.sample
+*.local
+
+# Test artifacts
+playwright-report/
+test-results/
+coverage/

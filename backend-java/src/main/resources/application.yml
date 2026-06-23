@@ -1,0 +1,49 @@
+server:
+  port: ${APP_PORT:3302}
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+spring:
+  application:
+    name: ahealth-backend
+  datasource:
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/health_monitoring?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=utf8}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:123456}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  flyway:
+    baseline-on-migrate: true
+    enabled: false
+    encoding: UTF-8
+    locations: classpath:db/migration
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 30MB
+  jackson:
+    time-zone: Asia/Shanghai
+    default-property-inclusion: non_null
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+custom:
+  medication:
+    recognize-url: ${CUSTOM_MEDICATION_RECOGNIZE_URL:http://127.0.0.1:8011/recognize/medications}

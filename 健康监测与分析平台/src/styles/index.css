@@ -1,0 +1,44 @@
+@import './tailwind.css';
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  width: 100%;
+  min-height: 100%;
+}
+
+body {
+  font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  background:
+    radial-gradient(circle at top, rgba(20, 78, 74, 0.16), transparent 35%),
+    linear-gradient(180deg, #eff5f3 0%, #e7efec 100%);
+  color: #132123;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}
+
+* {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

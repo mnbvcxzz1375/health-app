@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "health-app-frontend",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--port", "4173", "--host", "127.0.0.1"],
+      "cwd": "健康监测与分析平台",
+      "port": 4173
+    }
+  ]
+}
