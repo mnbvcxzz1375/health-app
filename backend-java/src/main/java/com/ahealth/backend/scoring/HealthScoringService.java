@@ -24,7 +24,7 @@ public class HealthScoringService {
         + " FROM monitor_records WHERE recorded_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)");
     var trend7d = jdbc.queryForList(
         "SELECT ROUND(AVG(hr),0) as a_hr, ROUND(AVG(sleep_score),0) as a_sleep, ROUND(AVG(stress_score),0) as a_stress,"
-        + " ROUND(AVG(vo2_max),1) as a_vo2, ROUND(AVG(exercise_minutes),0) as a_ex"
+        + " ROUND(AVG(vo2_max),1) as a_vo2, ROUND(AVG(exercise_minutes),0) as a_ex, ROUND(AVG(hrv_millis),0) as a_hrv"
         + " FROM monitor_records WHERE recorded_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)");
 
     int hr = safeInt(latest, 0, "hr", 72);
@@ -79,14 +79,75 @@ public class HealthScoringService {
     double hrFinal = (hrPop * 0.4 + hrBase * 0.35 + hrTrend * 0.25) * (1.0 + hrvBonus / 100.0);
     hrFinal = clamp(hrFinal, 0, 100);
 
-    // 睡眠 (权重 0.20)
-    double slPop = sleep;
+    // 睡眠 (权重 0.18) — 复合评分算法
+    double deepSleepHours = safeDouble(latest, 0, "deep_sleep_hours", 1.8);
+    int awakeTimes = safeInt(latest, 0, "awake_times", 1);
+
+    // Component 1: Raw sleep score (40% of sleep dimension)
+    double slRaw = sleep;
+
+    // Component 2: Deep sleep quality (25% of sleep dimension)
+    // Ideal: 1.5-2.5 hours deep sleep for 7-8h total
+    double deepRatio = deepSleepHours > 0 ? clamp(deepSleepHours / 2.0 * 100, 0, 100) : 70;
+    double slDeep = deepRatio;
+
+    // Component 3: Sleep continuity (20% of sleep dimension)
+    // Each awakening reduces score; ideal = 0-1 awakenings
+    double slContinuity = clamp(100 - awakeTimes * 15, 0, 100);
+
+    // Component 4: Sleep regularity (15% of sleep dimension)
+    // Based on 7-day sleep score consistency
+    // NOTE: monitor_records has no user_id column (single-user demo design)
+    var sleep7d = jdbc.queryForList(
+        "SELECT sleep_score FROM monitor_records WHERE recorded_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) ORDER BY recorded_at");
+    double slRegularity = 80; // default
+    if (sleep7d.size() >= 3) {
+      double mean = sleep7d.stream().mapToDouble(r -> safeDouble(List.of(r), 0, "sleep_score", 76)).average().orElse(76);
+      double variance = sleep7d.stream()
+          .mapToDouble(r -> Math.pow(safeDouble(List.of(r), 0, "sleep_score", 76) - mean, 2))
+          .average().orElse(0);
+      double stdDev = Math.sqrt(variance);
+      // Lower std dev = more regular = higher score
+      slRegularity = clamp(100 - stdDev * 3, 0, 100);
+    }
+
+    // Composite sleep score
+    double slPop = slRaw * 0.40 + slDeep * 0.25 + slContinuity * 0.20 + slRegularity * 0.15;
     double slBase = bSleep;
     double slTrend = clamp(100 - Math.abs(tSleep - sleep) * 2, 0, 100);
     double slFinal = slPop * 0.4 + slBase * 0.35 + slTrend * 0.25;
 
-    // 压力 (权重 0.15)
-    double stPop = 100 - stress;
+    // 压力 (权重 0.13) — HRV 驱动的压力评估
+    // Component 1: RMSSD-based parasympathetic score (40%)
+    double rmssdScore;
+    if (hrv <= 0) {
+      rmssdScore = 50; // no HRV data, neutral
+    } else if (hrv >= 60) {
+      rmssdScore = 92 + clamp((hrv - 60) / 40.0, 0, 1) * 8; // 92-100
+    } else if (hrv >= 40) {
+      rmssdScore = 70 + ((hrv - 40) / 20.0) * 22; // 70-92
+    } else if (hrv >= 25) {
+      rmssdScore = 45 + ((hrv - 25) / 15.0) * 25; // 45-70
+    } else {
+      rmssdScore = clamp(15 + (hrv / 25.0) * 30, 0, 45); // 0-45
+    }
+
+    // Component 2: HRV recovery trend (35%)
+    // Compare 7-day average HRV with 30-day average
+    double bHrvVal = safeDouble(baseline, 0, "a_hrv", hrv);
+    double tHrvVal = safeDouble(trend7d, 0, "a_hrv", hrv);
+    double hrvTrendRatio = bHrvVal > 0 ? tHrvVal / bHrvVal : 1.0;
+    double recoveryTrend;
+    if (hrvTrendRatio >= 1.1) recoveryTrend = 90; // improving
+    else if (hrvTrendRatio >= 0.95) recoveryTrend = 75; // stable
+    else if (hrvTrendRatio >= 0.8) recoveryTrend = 55; // declining
+    else recoveryTrend = 35; // significantly declining
+
+    // Component 3: Raw stress score (25%)
+    double stRaw = 100 - stress;
+
+    // Composite stress score
+    double stPop = rmssdScore * 0.40 + recoveryTrend * 0.35 + stRaw * 0.25;
     double stBase = 100 - bStress;
     double stTrend = clamp(100 - Math.abs(tStress - stress) * 2, 0, 100);
     double stFinal = stPop * 0.4 + stBase * 0.35 + stTrend * 0.25;
@@ -137,16 +198,26 @@ public class HealthScoringService {
     String risk = overall >= 80 ? "low" : overall >= 60 ? "medium" : "high";
 
     List<ScoringDtos.CategoryScore> cats = new ArrayList<>();
-    cats.add(cat("heartRate", "静息心率", hrFinal, hr, bHr, 0.13, "heart_rate"));
-    cats.add(cat("sleep", "睡眠质量", slFinal, sleep, bSleep, 0.18, "sleep_debt"));
-    cats.add(cat("stress", "压力负荷", stFinal, 100 - stress, 100 - bStress, 0.13, "stress_elevated"));
-    cats.add(cat("vo2Max", "最大摄氧量", vo2Final, vo2, bVo2, 0.09, "vo2_low"));
-    cats.add(cat("exercise", "锻炼时间", exFinal, exMin, bEx, 0.09, "exercise_deficit"));
-    cats.add(cat("standEnergy", "站立与活动", seFinal, standH, 0, 0.09, "sedentary"));
-    cats.add(cat("recovery", "恢复状态", recFinal, hrv, bHrv, 0.05, "recovery_low"));
-    cats.add(cat("activity", "步行活动", actFinal, steps, 0, 0.13, "activity_low"));
-    cats.add(cat("bloodPressure", "血压", bpFinal, systolic, bSystolic, 0.08, "bp_elevated"));
-    cats.add(cat("medAdherence", "用药依从性", adhFinal, adherenceScore, 100, 0.07, "medication_nonadherence"));
+    cats.add(cat("heartRate", "静息心率", hrFinal, hr, bHr, 0.13, "heart_rate",
+        String.format("年龄调整最优值 %.0f bpm，HRV修正 +%.1f%%", optimalRhr, hrvBonus)));
+    cats.add(cat("sleep", "睡眠质量", slFinal, sleep, bSleep, 0.18, "sleep_debt",
+        String.format("当前评分 %d，30天均值 %.0f，7天趋势 %.0f", sleep, bSleep, tSleep)));
+    cats.add(cat("stress", "压力负荷", stFinal, 100 - stress, 100 - bStress, 0.13, "stress_elevated",
+        String.format("RMSSD %d ms，恢复趋势 %.0f%%，自主神经评分 %.0f", hrv, recoveryTrend, rmssdScore)));
+    cats.add(cat("vo2Max", "最大摄氧量", vo2Final, vo2, bVo2, 0.09, "vo2_low",
+        String.format("VO2Max %.1f ml/kg/min，30天均值 %.1f", vo2, bVo2)));
+    cats.add(cat("exercise", "锻炼时间", exFinal, exMin, bEx, 0.09, "exercise_deficit",
+        String.format("当前 %d 分钟，30天均值 %.0f 分钟", exMin, bEx)));
+    cats.add(cat("standEnergy", "站立与活动", seFinal, standH, 0, 0.09, "sedentary",
+        String.format("站立 %d 小时 + 活动能量 %d kcal", standH, activeKcal)));
+    cats.add(cat("recovery", "恢复状态", recFinal, hrv, bHrv, 0.05, "recovery_low",
+        String.format("HRV %d ms（RMSSD），30天均值 %.0f ms", hrv, bHrv)));
+    cats.add(cat("activity", "步行活动", actFinal, steps, 0, 0.13, "activity_low",
+        String.format("步数 %d + 楼层 %d", steps, flights)));
+    cats.add(cat("bloodPressure", "血压", bpFinal, systolic, bSystolic, 0.08, "bp_elevated",
+        String.format("收缩压 %d / 舒张压 %d mmHg", systolic, diastolic)));
+    cats.add(cat("medAdherence", "用药依从性", adhFinal, adherenceScore, 100, 0.07, "medication_nonadherence",
+        String.format("今日依从性 %.0f%%（基于服药记录）", adherenceScore)));
 
     List<ScoringDtos.TopRisk> topRisks = new ArrayList<>();
     for (ScoringDtos.CategoryScore c : cats) {
@@ -269,9 +340,9 @@ public class HealthScoringService {
     }
   }
 
-  private ScoringDtos.CategoryScore cat(String key, String label, double score, double current, double baseline, double weight, String attentionType) {
+  private ScoringDtos.CategoryScore cat(String key, String label, double score, double current, double baseline, double weight, String attentionType, String algorithmNote) {
     return new ScoringDtos.CategoryScore(key, label, round(score),
-        current, baseline, round(current - baseline), riskNote(score), attentionType, weight);
+        current, baseline, round(current - baseline), riskNote(score), attentionType, weight, algorithmNote);
   }
 
   private double clamp(double v, double lo, double hi) { return Math.max(lo, Math.min(hi, v)); }
