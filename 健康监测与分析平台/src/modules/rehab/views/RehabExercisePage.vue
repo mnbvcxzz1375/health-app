@@ -88,7 +88,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getRehabExerciseByName, type RehabExercise } from '@/api/modules/rehab'
+import { getRehabExerciseByName, toggleRehabExercise, type RehabExercise } from '@/api/modules/rehab'
 import { getRehabExerciseMedia } from '@/modules/rehab/data/exerciseMedia'
 import { useToast } from '@/composables/useToast'
 import ClinicalFeatureNavBar from '@/shared/components/clinical/ClinicalFeatureNavBar.vue'
@@ -99,7 +99,7 @@ import Button from '@/shared/components/ui/Button.vue'
 
 const route = useRoute()
 const router = useRouter()
-const { success, warning } = useToast()
+const { success, warning, error: showError } = useToast()
 
 const name = computed(() => (typeof route.query.name === 'string' ? route.query.name : ''))
 
@@ -129,10 +129,18 @@ const loadExercise = async () => {
   }
 }
 
-const markDone = () => {
+const markDone = async () => {
   if (done.value) return
-  done.value = true
-  success('已记录完成', `${exercise.value.name} 已加入今日完成度。`)
+  try {
+    const planId = Number(route.query.planId) || 0
+    if (planId > 0) {
+      await toggleRehabExercise(planId)
+    }
+    done.value = true
+    success('已完成', `${exercise.value.name} 已标记为完成`)
+  } catch (err) {
+    showError('标记失败', err instanceof Error ? err.message : '请稍后重试')
+  }
 }
 
 const goReminder = () => {

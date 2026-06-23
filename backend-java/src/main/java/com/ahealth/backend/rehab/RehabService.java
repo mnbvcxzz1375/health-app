@@ -48,7 +48,27 @@ public class RehabService {
     if (updated == 0) {
       throw new ApiException(HttpStatus.NOT_FOUND, "训练记录不存在");
     }
+    updateWeekStats(userId);
     return buildPlan(userId);
+  }
+
+  /** After toggling plan item done status, update weekly stats */
+  private void updateWeekStats(long uid) {
+    String today = LocalDate.now().toString();
+    Integer doneCount = jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM rehab_plan_items WHERE user_id=? AND scheduled_date=? AND done=1",
+        Integer.class, uid, today);
+    // Assume each exercise is ~8 minutes
+    int minutes = (doneCount != null ? doneCount : 0) * 8;
+
+    int updated = jdbcTemplate.update(
+        "UPDATE rehab_week_stats SET minutes=? WHERE user_id=? AND stat_date=?",
+        minutes, uid, today);
+    if (updated == 0) {
+      jdbcTemplate.update(
+          "INSERT INTO rehab_week_stats(user_id, stat_date, minutes) VALUES(?,?,?)",
+          uid, today, minutes);
+    }
   }
 
   @Transactional

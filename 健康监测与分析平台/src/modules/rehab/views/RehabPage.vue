@@ -260,7 +260,7 @@
           </div>
 
           <div class="mt-4 flex flex-wrap gap-2">
-            <Button variant="secondary" @click="openVideo(ex.name)">动作示范</Button>
+            <Button variant="secondary" @click="openVideo(ex.name, ex.id)">动作示范</Button>
             <Button @click="setReminder(ex.name)">设置提醒</Button>
             <Button variant="ghost" @click="removeExercise(ex.id)">删除</Button>
           </div>
@@ -461,8 +461,8 @@ const removeExercise = async (id: number) => {
   }
 }
 
-const openVideo = (name: string) => {
-  router.push({ path: '/rehab/exercise', query: { name } })
+const openVideo = (name: string, planId: number) => {
+  router.push({ path: '/rehab/exercise', query: { name, planId: String(planId) } })
 }
 
 const setReminder = (_name?: string) => {

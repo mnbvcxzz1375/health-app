@@ -47,3 +47,8 @@ springdoc:
 custom:
   medication:
     recognize-url: ${CUSTOM_MEDICATION_RECOGNIZE_URL:http://127.0.0.1:8011/recognize/medications}
+
+# OpenMed / HuggingFace Inference
+OPENMED_API_TOKEN: ${OPENMED_API_TOKEN:${HF_API_TOKEN:}}
+OPENMED_NER_MODEL: ${OPENMED_NER_MODEL:OpenMed/OpenMed-NER-PharmaDetect-SuperMedical-125M}
+OPENMED_PII_MODEL: ${OPENMED_PII_MODEL:OpenMed/OpenMed-PII-Chinese-QwenMed-XLarge-600M-v1}
