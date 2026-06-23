@@ -10,6 +10,7 @@ export type CategoryScore = {
   riskNote: string
   attentionType: string
   weight: number
+  algorithmNote: string
 }
 
 export type TopRisk = {

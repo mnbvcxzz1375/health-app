@@ -23,7 +23,8 @@ public final class ScoringDtos {
       double offset,
       String riskNote,
       String attentionType,
-      double weight
+      double weight,
+      String algorithmNote
   ) {}
 
   public record TopRisk(
