@@ -25,7 +25,7 @@ public class OpenMedService {
 
   public OpenMedService(
       ObjectMapper objectMapper,
-      @Value("${OPENMED_API_TOKEN:${HF_API_TOKEN:}}") String apiToken,
+      @Value("${OPENMED_API_TOKEN:}") String apiToken,
       @Value("${OPENMED_NER_MODEL:OpenMed/OpenMed-NER-PharmaDetect-SuperMedical-125M}") String nerModel,
       @Value("${OPENMED_PII_MODEL:OpenMed/OpenMed-PII-Chinese-QwenMed-XLarge-600M-v1}") String piiModel
   ) {
