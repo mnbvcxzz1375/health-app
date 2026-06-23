@@ -56,11 +56,28 @@ public class HealthScoringService {
 
     // === 维度评分 ===
 
-    // 心率 (权重 0.15)
-    double hrPop = clamp(100 - Math.abs(hr - 65) * 1.5, 0, 100);
-    double hrBase = clamp(100 - Math.abs(bHr - 65) * 1.2, 0, 100);
+    // 心率 (权重 0.13) — 年龄调整 + HRV 融合
+    int age = getUserAge(uid);
+    double optimalRhr = 70.0 - (age - 30) * 0.3;
+    optimalRhr = clamp(optimalRhr, 55, 80); // bound to reasonable range
+
+    double hrDeviation = Math.abs(hr - optimalRhr);
+    double hrPenalty;
+    if (hrDeviation <= 5) hrPenalty = 1.0;
+    else if (hrDeviation <= 15) hrPenalty = 1.5;
+    else if (hrDeviation <= 25) hrPenalty = 2.5;
+    else hrPenalty = 4.0;
+
+    double hrPop = clamp(100 - hrDeviation * hrPenalty, 0, 100);
+    double bHrDeviation = Math.abs(bHr - optimalRhr);
+    double hrBase = clamp(100 - bHrDeviation * hrPenalty * 0.8, 0, 100);
     double hrTrend = clamp(100 - Math.abs(tHr - hr) * 3, 0, 100);
-    double hrFinal = hrPop * 0.4 + hrBase * 0.35 + hrTrend * 0.25;
+
+    // HRV bonus: RMSSD indicates autonomic health
+    double hrvBonus = clamp((hrv - 30) * 0.3, -10, 15);
+    // Weights: 0.4 + 0.35 + 0.25 = 1.0, hrvBonus applied as scaling factor
+    double hrFinal = (hrPop * 0.4 + hrBase * 0.35 + hrTrend * 0.25) * (1.0 + hrvBonus / 100.0);
+    hrFinal = clamp(hrFinal, 0, 100);
 
     // 睡眠 (权重 0.20)
     double slPop = sleep;
@@ -258,6 +275,17 @@ public class HealthScoringService {
   }
 
   private double clamp(double v, double lo, double hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  private int getUserAge(long uid) {
+    try {
+      Integer age = jdbc.queryForObject(
+          "SELECT age FROM user_settings WHERE user_id=?", Integer.class, uid);
+      return age != null ? age : 30;
+    } catch (Exception e) {
+      return 30; // default
+    }
+  }
+
   private int round(double v) { return (int) Math.round(v); }
   private int safeInt(List<Map<String, Object>> rows, int idx, String col, int def) {
     if (rows.size() <= idx) return def;
