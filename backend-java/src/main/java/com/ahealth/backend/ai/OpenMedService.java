@@ -22,38 +22,100 @@ public class OpenMedService {
   private final String apiToken;
   private final String nerModel;
   private final String piiModel;
+  private final String localInferenceUrl;
 
   public OpenMedService(
       ObjectMapper objectMapper,
       @Value("${OPENMED_API_TOKEN:}") String apiToken,
       @Value("${OPENMED_NER_MODEL:OpenMed/OpenMed-NER-PharmaDetect-SuperMedical-125M}") String nerModel,
-      @Value("${OPENMED_PII_MODEL:OpenMed/OpenMed-PII-Chinese-QwenMed-XLarge-600M-v1}") String piiModel
+      @Value("${OPENMED_PII_MODEL:OpenMed/OpenMed-PII-Chinese-QwenMed-XLarge-600M-v1}") String piiModel,
+      @Value("${OPENMED_LOCAL_URL:http://127.0.0.1:8012}") String localInferenceUrl
   ) {
     this.objectMapper = objectMapper;
     this.apiToken = apiToken == null ? "" : apiToken.trim();
     this.nerModel = nerModel;
     this.piiModel = piiModel;
+    this.localInferenceUrl = localInferenceUrl.endsWith("/") ? localInferenceUrl.substring(0, localInferenceUrl.length() - 1) : localInferenceUrl;
     this.httpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(20))
         .build();
   }
 
   /**
+   * Check if local inference service is available.
+   */
+  private boolean isLocalAvailable() {
+    try {
+      HttpRequest req = HttpRequest.newBuilder()
+          .uri(URI.create(localInferenceUrl + "/health"))
+          .timeout(Duration.ofSeconds(2))
+          .GET()
+          .build();
+      HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+      return resp.statusCode() == 200;
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  /**
    * Call PharmaDetect NER to extract medical entities from text.
-   * Returns list of entities with label, text, offsets, confidence.
+   * Tries local inference first, falls back to HuggingFace API.
    */
   public List<AiDtos.NerEntity> nerExtract(String text) {
     if (text == null || text.isBlank()) return List.of();
+
+    // Try local inference first
+    try {
+      String url = localInferenceUrl + "/ner/extract";
+      Map<String, String> body = Map.of("text", text);
+      HttpRequest request = HttpRequest.newBuilder()
+          .uri(URI.create(url))
+          .timeout(Duration.ofSeconds(30))
+          .header("Content-Type", "application/json")
+          .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body), StandardCharsets.UTF_8))
+          .build();
+      HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+      if (response.statusCode() == 200) {
+        JsonNode result = objectMapper.readTree(response.body());
+        return parseNerResultFromLocal(result);
+      }
+    } catch (Exception ignored) {
+      // Local inference failed, try HuggingFace API
+    }
+
+    // Fallback to HuggingFace API
     JsonNode result = callHfInference(nerModel, text, "ner");
     return parseNerResult(result, text);
   }
 
   /**
    * Call PII detection model to find personal information in text.
-   * Returns list of PII masks with type, original text, position.
+   * Tries local inference first, falls back to HuggingFace API.
    */
   public List<AiDtos.PiiMask> piiDetect(String text) {
     if (text == null || text.isBlank()) return List.of();
+
+    // Try local inference first
+    try {
+      String url = localInferenceUrl + "/pii/detect";
+      Map<String, String> body = Map.of("text", text);
+      HttpRequest request = HttpRequest.newBuilder()
+          .uri(URI.create(url))
+          .timeout(Duration.ofSeconds(30))
+          .header("Content-Type", "application/json")
+          .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body), StandardCharsets.UTF_8))
+          .build();
+      HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+      if (response.statusCode() == 200) {
+        JsonNode result = objectMapper.readTree(response.body());
+        return parsePiiResultFromLocal(result);
+      }
+    } catch (Exception ignored) {
+      // Local inference failed, try HuggingFace API
+    }
+
+    // Fallback to HuggingFace API
     JsonNode result = callHfInference(piiModel, text, "ner");
     return parsePiiResult(result, text);
   }
@@ -65,7 +127,7 @@ public class OpenMedService {
   private JsonNode callHfInference(String model, String input, String taskType) {
     if (apiToken.isBlank()) {
       throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,
-          "未配置 OPENMED_API_TOKEN，无法调用 OpenMed 模型。");
+          "本地推理服务不可用且未配置 OPENMED_API_TOKEN，无法调用 OpenMed 模型。");
     }
 
     try {
@@ -138,7 +200,46 @@ public class OpenMedService {
     return masks;
   }
 
+  /** Parse NER results from local inference service format: {entities: [{text, label, score, start, end}]} */
+  private List<AiDtos.NerEntity> parseNerResultFromLocal(JsonNode result) {
+    List<AiDtos.NerEntity> entities = new ArrayList<>();
+    JsonNode entitiesNode = result.path("entities");
+    if (!entitiesNode.isArray()) return entities;
+    for (JsonNode item : entitiesNode) {
+      String word = item.path("text").asText("");
+      String label = item.path("label").asText("");
+      double score = item.path("score").asDouble(0);
+      int start = item.path("start").asInt(0);
+      int end = item.path("end").asInt(0);
+      if (!word.isBlank() && score > 0.3) {
+        entities.add(new AiDtos.NerEntity(word, label, start, end, score));
+      }
+    }
+    return entities;
+  }
+
+  /** Parse PII results from local inference service format: {masks: [{text, label, score, start, end}]} */
+  private List<AiDtos.PiiMask> parsePiiResultFromLocal(JsonNode result) {
+    List<AiDtos.PiiMask> masks = new ArrayList<>();
+    JsonNode masksNode = result.path("masks");
+    if (!masksNode.isArray()) return masks;
+    Map<String, Integer> typeCounters = new HashMap<>();
+    for (JsonNode item : masksNode) {
+      String word = item.path("text").asText("");
+      String label = item.path("label").asText("");
+      double score = item.path("score").asDouble(0);
+      int start = item.path("start").asInt(0);
+      int end = item.path("end").asInt(0);
+      if (!word.isBlank() && score > 0.5) {
+        int count = typeCounters.merge(label, 1, Integer::sum);
+        String maskToken = "[" + label + "_" + count + "]";
+        masks.add(new AiDtos.PiiMask(word, maskToken, label, start, end));
+      }
+    }
+    return masks;
+  }
+
   public boolean isConfigured() {
-    return !apiToken.isBlank();
+    return !apiToken.isBlank() || !localInferenceUrl.isBlank();
   }
 }

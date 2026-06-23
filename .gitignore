@@ -38,3 +38,7 @@ docs/assets/screenshots/*.log
 playwright-report/
 test-results/
 coverage/
+
+# ML Model weights (download separately via HF mirror)
+backend-java/models/
+openmed-inference-service/__pycache__/

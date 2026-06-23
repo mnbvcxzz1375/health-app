@@ -72,23 +72,6 @@ public class BackendSchemaInitializer {
         """
     );
 
-    jdbcTemplate.execute(
-        """
-        CREATE TABLE IF NOT EXISTS medication_intake_records (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          user_id INT NOT NULL,
-          medication_id INT NOT NULL,
-          scheduled_time VARCHAR(8) NOT NULL,
-          actual_time DATETIME NULL,
-          status VARCHAR(16) NOT NULL DEFAULT 'pending',
-          note TEXT NULL,
-          created_at DATETIME NOT NULL,
-          INDEX idx_mir_user (user_id),
-          INDEX idx_mir_med (medication_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-        """
-    );
-
     // DDI knowledge base
     jdbcTemplate.execute(
         """
