@@ -5,6 +5,7 @@ import com.ahealth.backend.ai.DashScopeService;
 import com.ahealth.backend.ai.DdiKnowledgeService;
 import com.ahealth.backend.ai.MedicalNerService;
 import com.ahealth.backend.ai.OcrPreprocessService;
+import com.ahealth.backend.ai.PiiScrubService;
 import com.ahealth.backend.common.ApiException;
 import com.ahealth.backend.common.CurrentUser;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -61,6 +62,7 @@ public class MedicationService {
   private final DdiKnowledgeService ddiKnowledgeService;
   private final MedicalNerService medicalNerService;
   private final OcrPreprocessService ocrPreprocessService;
+  private final PiiScrubService piiScrubService;
   private final String customMedicationRecognizeUrl;
   private final RestTemplate restTemplate;
 
@@ -70,6 +72,7 @@ public class MedicationService {
       DdiKnowledgeService ddiKnowledgeService,
       MedicalNerService medicalNerService,
       OcrPreprocessService ocrPreprocessService,
+      PiiScrubService piiScrubService,
       @Value("${custom.medication.recognize-url:}") String customMedicationRecognizeUrl
   ) {
     this.jdbcTemplate = jdbcTemplate;
@@ -77,6 +80,7 @@ public class MedicationService {
     this.ddiKnowledgeService = ddiKnowledgeService;
     this.medicalNerService = medicalNerService;
     this.ocrPreprocessService = ocrPreprocessService;
+    this.piiScrubService = piiScrubService;
     this.customMedicationRecognizeUrl = customMedicationRecognizeUrl == null ? "" : customMedicationRecognizeUrl.trim();
     SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
     requestFactory.setConnectTimeout(10_000);
@@ -308,7 +312,19 @@ public class MedicationService {
         0.1,
         "药品识别"
     );
-    return normalizeMedicationRecognitionBatch(payload);
+    MedicationDtos.MedicationRecognitionBatchResult batch = normalizeMedicationRecognitionBatch(payload);
+
+    // PII scrub: mask patient names, doctor signatures in OCR text
+    List<MedicationDtos.MedicationRecognitionResult> scrubbed = new ArrayList<>();
+    for (MedicationDtos.MedicationRecognitionResult item : batch.items()) {
+      String safeNotes = piiScrubService.scrub(item.notes()).scrubbedText();
+      String safeSourceText = piiScrubService.scrub(item.sourceText()).scrubbedText();
+      scrubbed.add(new MedicationDtos.MedicationRecognitionResult(
+          item.name(), item.alias(), item.dosageValue(), item.dosageUnit(),
+          item.usage(), safeNotes, item.photoUrl(), item.confidence(), safeSourceText
+      ));
+    }
+    return new MedicationDtos.MedicationRecognitionBatchResult(scrubbed, batch.confidence());
   }
 
   /**
