@@ -2,13 +2,18 @@ package com.ahealth.backend.consult;
 
 import com.ahealth.backend.ai.DashScopeService;
 import com.ahealth.backend.common.ApiException;
+import com.ahealth.backend.common.CurrentUser;
 import com.ahealth.backend.context.ContextDtos;
 import com.ahealth.backend.context.ContextService;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -27,10 +32,17 @@ public class ConsultService {
 
   private final DashScopeService dashScopeService;
   private final ContextService contextService;
+  private final HealthKnowledgeService knowledgeService;
+  private final JdbcTemplate jdbc;
+  private final ObjectMapper objectMapper;
 
-  public ConsultService(DashScopeService dashScopeService, ContextService contextService) {
+  public ConsultService(DashScopeService dashScopeService, ContextService contextService,
+      HealthKnowledgeService knowledgeService, JdbcTemplate jdbc, ObjectMapper objectMapper) {
     this.dashScopeService = dashScopeService;
     this.contextService = contextService;
+    this.knowledgeService = knowledgeService;
+    this.jdbc = jdbc;
+    this.objectMapper = objectMapper;
   }
 
   public ConsultDtos.ConsultResponse ask(ConsultDtos.ConsultQuestionRequest request) {
@@ -39,7 +51,27 @@ public class ConsultService {
       throw new ApiException(HttpStatus.BAD_REQUEST, "请输入问题内容。");
     }
 
-    String userMessage = buildContextAwareMessage(request.scene(), question);
+    // Domain restriction: reject non-health questions
+    if (!knowledgeService.isHealthRelated(question)) {
+      return new ConsultDtos.ConsultResponse(
+          "consult_guarded_" + UUID.randomUUID().toString().replace("-", ""),
+          "我是健康管理助手，只能回答健康、用药、康复、饮食等相关问题。您可以问我关于血压管理、睡眠改善、运动康复、药物使用等方面的问题。",
+          List.of("帮我看看今天的健康数据", "最近睡眠不好怎么办", "我的用药有什么注意事项"),
+          "仅用于健康管理辅助，不替代医生诊疗。"
+      );
+    }
+
+    long uid = CurrentUser.requireUserId();
+
+    // Retrieve knowledge from RAG
+    List<String> knowledge = knowledgeService.retrieveKnowledge(uid, question);
+    String knowledgeBlock = "";
+    if (!knowledge.isEmpty()) {
+      knowledgeBlock = "\n相关知识：\n" + String.join("\n", knowledge.stream().map(k -> "- " + k).toList());
+    }
+
+    // Build context-aware message with knowledge injection
+    String userMessage = buildContextAwareMessage(request.scene(), question) + knowledgeBlock;
 
     JsonNode payload = dashScopeService.requestJson(
         ASSISTANT_SYSTEM_PROMPT,
@@ -58,6 +90,10 @@ public class ConsultService {
 
     String requestId = "consult_" + UUID.randomUUID().toString().replace("-", "");
     asyncSaveMemory(requestId, question, answer);
+
+    // Persist to consult_history
+    saveHistory(uid, requestId, normalizeScene(request.scene()), question, answer,
+        suggestions, disclaimer, knowledge, dashScopeService.chatModel());
 
     return new ConsultDtos.ConsultResponse(requestId, answer, suggestions, disclaimer);
   }
@@ -139,5 +175,50 @@ public class ConsultService {
   private String normalizeText(String value, String fallback) {
     String text = value == null ? "" : value.replaceAll("\\s+", " ").trim();
     return text.isBlank() ? fallback : text;
+  }
+
+  // === History CRUD ===
+
+  public List<Map<String, Object>> getHistory(int limit, int offset) {
+    long uid = CurrentUser.requireUserId();
+    return jdbc.queryForList(
+        "SELECT id, request_id, scene, question, answer, suggestions_json, disclaimer, "
+        + "knowledge_sources_json, model_used, created_at "
+        + "FROM consult_history WHERE user_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        uid, limit, offset);
+  }
+
+  public Map<String, Object> deleteHistoryItem(int id) {
+    long uid = CurrentUser.requireUserId();
+    jdbc.update("DELETE FROM consult_history WHERE id=? AND user_id=?", id, uid);
+    return Map.of("success", true);
+  }
+
+  public Map<String, Object> clearHistory() {
+    long uid = CurrentUser.requireUserId();
+    int deleted = jdbc.update("DELETE FROM consult_history WHERE user_id=?", uid);
+    return Map.of("success", true, "deleted", deleted);
+  }
+
+  private void saveHistory(long uid, String requestId, String scene, String question,
+      String answer, List<String> suggestions, String disclaimer,
+      List<String> knowledgeSources, String modelUsed) {
+    try {
+      jdbc.update(
+          "INSERT INTO consult_history(user_id,request_id,scene,question,answer,suggestions_json,"
+          + "disclaimer,knowledge_sources_json,model_used,created_at) VALUES(?,?,?,?,?,?,?,?,?,NOW())",
+          uid, requestId, scene, question, answer,
+          toJson(suggestions), disclaimer, toJson(knowledgeSources), modelUsed);
+    } catch (Exception ignored) {
+      // History save is best-effort
+    }
+  }
+
+  private String toJson(Object value) {
+    try {
+      return objectMapper.writeValueAsString(value);
+    } catch (JsonProcessingException e) {
+      return "[]";
+    }
   }
 }

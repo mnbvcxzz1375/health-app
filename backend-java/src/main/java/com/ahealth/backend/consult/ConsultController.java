@@ -4,10 +4,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -54,5 +59,22 @@ public class ConsultController {
         "disclaimer", result.disclaimer()
     )) + "\n");
     response.flushBuffer();
+  }
+
+  @GetMapping("/history")
+  public List<Map<String, Object>> getHistory(
+      @RequestParam(defaultValue = "20") int limit,
+      @RequestParam(defaultValue = "0") int offset) {
+    return consultService.getHistory(limit, offset);
+  }
+
+  @DeleteMapping("/history/{id}")
+  public Map<String, Object> deleteHistory(@PathVariable int id) {
+    return consultService.deleteHistoryItem(id);
+  }
+
+  @DeleteMapping("/history")
+  public Map<String, Object> clearHistory() {
+    return consultService.clearHistory();
   }
 }

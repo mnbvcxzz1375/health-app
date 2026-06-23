@@ -16,6 +16,19 @@ export type ConsultResponse = {
   disclaimer: string
 }
 
+export type ConsultHistoryItem = {
+  id: number
+  requestId: string
+  scene: string
+  question: string
+  answer: string
+  suggestions: string[]
+  disclaimer: string
+  knowledgeSources: string[]
+  modelUsed: string
+  createdAt: string
+}
+
 const SESSION_KEY = 'hm_auth_session'
 
 function readToken() {
@@ -153,4 +166,30 @@ export async function streamConsultQuestion(
       if (event.type === 'error') throw new Error(event.message)
     }
   }
+}
+
+export async function getConsultHistory(limit = 20, offset = 0): Promise<ConsultHistoryItem[]> {
+  try {
+    const { data } = await http.get(`/consult/history?limit=${limit}&offset=${offset}`)
+    return (data as Record<string, unknown>[]).map(item => ({
+      id: item.id as number,
+      requestId: item.request_id as string,
+      scene: item.scene as string,
+      question: item.question as string,
+      answer: item.answer as string,
+      suggestions: typeof item.suggestions_json === 'string' ? JSON.parse(item.suggestions_json as string) : [],
+      disclaimer: (item.disclaimer as string) ?? '',
+      knowledgeSources: typeof item.knowledge_sources_json === 'string' ? JSON.parse(item.knowledge_sources_json as string) : [],
+      modelUsed: (item.model_used as string) ?? '',
+      createdAt: item.created_at as string,
+    }))
+  } catch { return [] }
+}
+
+export async function deleteConsultHistory(id: number): Promise<void> {
+  await http.delete(`/consult/history/${id}`)
+}
+
+export async function clearConsultHistory(): Promise<void> {
+  await http.delete('/consult/history')
 }

@@ -14,6 +14,14 @@
           <p class="text-lg font-semibold text-slate-950">智能助手</p>
           <p class="text-xs text-slate-500">历史会自动保留</p>
         </div>
+        <button
+          type="button"
+          class="ml-auto inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/90 text-slate-900 shadow-sm transition hover:bg-white"
+          aria-label="历史记录"
+          @click="showHistory = !showHistory"
+        >
+          <iconify-icon icon="solar:history-outline" width="20" height="20" />
+        </button>
       </div>
     </header>
 
@@ -54,6 +62,10 @@
               "
             >
               <p class="whitespace-pre-wrap text-sm leading-7">{{ message.content || '正在生成回答...' }}</p>
+              <div v-if="message.knowledgeSources?.length" class="mt-2 text-xs text-slate-400">
+                <span>参考：</span>
+                <span v-for="(src, i) in message.knowledgeSources" :key="i">{{ src }}{{ i < message.knowledgeSources.length - 1 ? '、' : '' }}</span>
+              </div>
               <div v-if="message.suggestions?.length" class="mt-3 flex flex-wrap gap-2">
                 <button
                   v-for="suggestion in message.suggestions"
@@ -70,6 +82,63 @@
         </section>
       </div>
     </div>
+
+    <!-- History panel (slides in from right) -->
+    <Transition name="slide-right">
+      <div v-if="showHistory" class="fixed inset-y-0 right-0 z-50 flex w-80 flex-col border-l border-slate-200 bg-white shadow-xl">
+        <div class="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+          <span class="text-base font-semibold text-slate-900">历史记录</span>
+          <div class="flex items-center gap-2">
+            <button
+              v-if="historyItems.length"
+              type="button"
+              class="rounded-full px-2 py-1 text-xs text-red-500 transition hover:bg-red-50"
+              @click="clearAllHistory"
+            >
+              清空
+            </button>
+            <button
+              type="button"
+              class="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100"
+              @click="showHistory = false"
+            >
+              <iconify-icon icon="solar:close-outline" width="20" height="20" />
+            </button>
+          </div>
+        </div>
+        <div class="flex-1 overflow-y-auto">
+          <div v-if="!historyItems.length" class="p-6 text-center text-sm text-slate-400">暂无历史记录</div>
+          <div
+            v-for="item in historyItems"
+            :key="item.id"
+            class="cursor-pointer border-b border-slate-50 px-4 py-3 transition hover:bg-slate-50"
+            @click="loadHistoryQuestion(item)"
+          >
+            <p class="truncate text-sm font-medium text-slate-800">{{ item.question }}</p>
+            <p class="mt-1 truncate text-xs text-slate-500">{{ item.answer?.substring(0, 60) }}...</p>
+            <div class="mt-1.5 flex items-center justify-between">
+              <span class="text-xs text-slate-400">{{ formatTime(item.createdAt) }}</span>
+              <button
+                type="button"
+                class="rounded-full px-2 py-0.5 text-xs text-red-400 transition hover:bg-red-50 hover:text-red-600"
+                @click.stop="deleteHistoryItem(item.id)"
+              >
+                删除
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- History overlay backdrop -->
+    <Transition name="fade">
+      <div
+        v-if="showHistory"
+        class="fixed inset-0 z-40 bg-black/20"
+        @click="showHistory = false"
+      />
+    </Transition>
 
     <footer class="sticky bottom-0 z-20 border-t border-white/70 bg-white/90 backdrop-blur">
       <div class="mx-auto max-w-[960px] px-4 py-3 lg:px-6">
@@ -101,7 +170,7 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { streamConsultQuestion } from '@/api/modules/consult'
+import { streamConsultQuestion, getConsultHistory, deleteConsultHistory, clearConsultHistory, type ConsultHistoryItem } from '@/api/modules/consult'
 import { assistantPresetQuestions } from '@/modules/assistant/presets'
 
 type AssistantMessage = {
@@ -109,6 +178,7 @@ type AssistantMessage = {
   role: 'user' | 'assistant'
   content: string
   suggestions?: string[]
+  knowledgeSources?: string[]
 }
 
 const STORAGE_KEY = 'hm_assistant_history'
@@ -118,6 +188,58 @@ const draftQuestion = ref('')
 const loading = ref(false)
 const messageViewport = ref<HTMLElement | null>(null)
 const messages = ref<AssistantMessage[]>([])
+const showHistory = ref(false)
+const historyItems = ref<ConsultHistoryItem[]>([])
+
+async function loadHistoryList() {
+  historyItems.value = await getConsultHistory(50, 0)
+}
+
+function loadHistoryQuestion(item: ConsultHistoryItem) {
+  messages.value.push({
+    id: createMessageId('user'),
+    role: 'user',
+    content: item.question,
+  })
+  messages.value.push({
+    id: item.requestId || createMessageId('history'),
+    role: 'assistant',
+    content: item.answer,
+    suggestions: item.suggestions,
+    knowledgeSources: item.knowledgeSources,
+  })
+  showHistory.value = false
+  void scrollMessagesToBottom()
+}
+
+async function deleteHistoryItem(id: number) {
+  await deleteConsultHistory(id)
+  historyItems.value = historyItems.value.filter(item => item.id !== id)
+}
+
+async function clearAllHistory() {
+  await clearConsultHistory()
+  historyItems.value = []
+}
+
+function formatTime(dateStr: string): string {
+  if (!dateStr) return ''
+  try {
+    const d = new Date(dateStr)
+    const now = new Date()
+    const diffMs = now.getTime() - d.getTime()
+    const diffMin = Math.floor(diffMs / 60000)
+    if (diffMin < 1) return '刚刚'
+    if (diffMin < 60) return diffMin + ' 分钟前'
+    const diffHours = Math.floor(diffMin / 60)
+    if (diffHours < 24) return diffHours + ' 小时前'
+    const diffDays = Math.floor(diffHours / 24)
+    if (diffDays < 7) return diffDays + ' 天前'
+    return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+  } catch {
+    return dateStr
+  }
+}
 
 function createWelcomeMessages(): AssistantMessage[] {
   return [
@@ -249,8 +371,32 @@ watch(
   { deep: true },
 )
 
+watch(showHistory, (open) => {
+  if (open) void loadHistoryList()
+})
+
 onMounted(async () => {
   loadMessages()
   await scrollMessagesToBottom()
 })
 </script>
+
+<style scoped>
+.slide-right-enter-active,
+.slide-right-leave-active {
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+.slide-right-enter-from,
+.slide-right-leave-to {
+  transform: translateX(100%);
+  opacity: 0;
+}
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>

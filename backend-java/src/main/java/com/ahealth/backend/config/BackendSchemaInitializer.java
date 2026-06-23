@@ -122,6 +122,27 @@ public class BackendSchemaInitializer {
         """
     );
 
+    // consult_history for AI assistant persistent history
+    jdbcTemplate.execute(
+        """
+        CREATE TABLE IF NOT EXISTS consult_history (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          user_id INT NOT NULL,
+          request_id VARCHAR(64) NOT NULL,
+          scene VARCHAR(32) NOT NULL DEFAULT 'assistant',
+          question TEXT NOT NULL,
+          answer TEXT NOT NULL,
+          suggestions_json TEXT,
+          disclaimer VARCHAR(255) DEFAULT '',
+          knowledge_sources_json TEXT,
+          model_used VARCHAR(64) DEFAULT '',
+          created_at DATETIME NOT NULL,
+          INDEX idx_consult_user (user_id),
+          INDEX idx_consult_created (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """
+    );
+
     // Apple HealthKit 扩展列
     ensureColumn("rehab_exercises", "user_id", "ALTER TABLE rehab_exercises ADD COLUMN user_id INT NULL");
     ensureColumn("analyze_tasks", "report_json", "ALTER TABLE analyze_tasks ADD COLUMN report_json LONGTEXT");
