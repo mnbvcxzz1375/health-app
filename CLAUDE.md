@@ -130,3 +130,15 @@ Configuration is driven by `.env` files (gitignored). Template files:
 - **Java version conflict**: backend-java requires Java 21, posture-backend requires Java 8. The startup script `start-local-stack.ps1` handles this by pointing to specific Windows Java installations.
 - **Development is Windows-native**: Maven wrapper uses `mvnw.cmd`, startup uses PowerShell. Adjust shell commands for Linux/macOS.
 - **API documentation**: `健康监测与分析平台/API.md` (frontend API contract), `posture-backend/API_DOCUMENTATION.md`
+
+## OpenMed AI Integration
+
+The project integrates OpenMed's open-source medical models via HuggingFace Inference API:
+
+- **PharmaDetect NER** (`OpenMed-NER-PharmaDetect-SuperMedical-125M`): Extracts drug entities from OCR text
+- **PII De-identification** (`OpenMed-PII-Chinese-QwenMed-XLarge-600M-v1`): Scrubs personal info before sending to LLMs
+- **DDI Knowledge Base**: Drug-drug interaction checks from curated knowledge table
+
+**Architecture:** `ModelRouterService` classifies intent → routes to optimal model → injects user context → returns result. All text passes through `PiiScrubService` before reaching any external model.
+
+**Configuration:** Set `OPENMED_API_TOKEN` (or `HF_API_TOKEN`) env var. Models are configurable via `OPENMED_NER_MODEL` and `OPENMED_PII_MODEL`.
