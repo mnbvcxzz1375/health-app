@@ -19,8 +19,7 @@ public class HealthScoringService {
         + "active_energy_kcal,flights_climbed,hrv_millis,mindful_minutes,steps FROM monitor_records ORDER BY recorded_at DESC LIMIT 1");
     var baseline = jdbc.queryForList(
         "SELECT AVG(hr) as a_hr, AVG(sleep_score) as a_sleep, AVG(stress_score) as a_stress,"
-        + " AVG(vo2_max) as a_vo2, AVG(exercise_minutes) as a_ex, AVG(hrv_millis) as a_hrv,"
-        + " AVG(systolic_bp) as a_systolic, AVG(diastolic_bp) as a_diastolic"
+        + " AVG(vo2_max) as a_vo2, AVG(exercise_minutes) as a_ex, AVG(hrv_millis) as a_hrv"
         + " FROM monitor_records WHERE recorded_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)");
     var trend7d = jdbc.queryForList(
         "SELECT ROUND(AVG(hr),0) as a_hr, ROUND(AVG(sleep_score),0) as a_sleep, ROUND(AVG(stress_score),0) as a_stress,"

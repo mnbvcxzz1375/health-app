@@ -687,7 +687,7 @@ public class RehabService {
     for (var item : planItems) {
       String name = (String) item.get("name");
       int targetMinutes = ((Number) item.get("minutes")).intValue();
-      boolean done = ((Number) item.get("done")).intValue() == 1;
+      boolean done = Boolean.TRUE.equals(item.get("done")) || "1".equals(String.valueOf(item.get("done")));
 
       if (!done) {
         analyses.add(new RehabDtos.ExerciseAnalysis(
