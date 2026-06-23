@@ -272,6 +272,25 @@
         </div>
       </div>
 
+      <!-- DDI Warnings -->
+      <div v-if="ddiWarnings.length" class="rounded-[1.35rem] border-2 border-amber-200 bg-amber-50 p-4">
+        <div class="flex items-center gap-2 mb-2">
+          <iconify-icon icon="solar:danger-triangle-outline" width="18" height="18" class="text-amber-600" />
+          <span class="text-sm font-semibold text-amber-800">药物相互作用提醒</span>
+        </div>
+        <div v-for="(w, i) in ddiWarnings" :key="i" class="mb-2 last:mb-0">
+          <div class="flex items-center gap-2">
+            <span class="rounded-full px-2 py-0.5 text-xs font-medium"
+              :class="w.severity === 'high' ? 'bg-red-100 text-red-700' : w.severity === 'moderate' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'">
+              {{ w.severity === 'high' ? '高风险' : w.severity === 'moderate' ? '中等风险' : '低风险' }}
+            </span>
+            <span class="text-sm font-medium text-slate-800">{{ w.drugA }} + {{ w.drugB }}</span>
+          </div>
+          <p class="mt-1 text-xs text-slate-600">{{ w.description }}</p>
+          <p class="mt-0.5 text-xs text-teal-700">建议：{{ w.recommendation }}</p>
+        </div>
+      </div>
+
       <ClinicalStateNotice
         v-if="!todaySchedule.items.length"
         tone="empty"
@@ -367,6 +386,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { checkDrugInteractions, type DdiWarning } from '@/api/modules/ai'
 import {
   confirmMedicationIntake,
   createMedicationAlarm,
@@ -414,6 +434,13 @@ const todaySchedule = ref<TodayScheduleResponse>({
   totalCount: 0,
   completedCount: 0,
 })
+
+const ddiWarnings = ref<DdiWarning[]>([])
+
+// Load DDI warnings when entering today tab
+const loadDdiWarnings = async () => {
+  ddiWarnings.value = await checkDrugInteractions()
+}
 
 const todayProgress = computed(() => {
   if (!todaySchedule.value.totalCount) return 0
@@ -681,7 +708,10 @@ const confirmIntake = async (alarmId: number, status: 'taken' | 'skipped' | 'hal
 
 watch(activeTab, (tab) => {
   if (tab === 'medications') void loadAlarms()
-  if (tab === 'today') void loadTodaySchedule()
+  if (tab === 'today') {
+    void loadTodaySchedule()
+    void loadDdiWarnings()
+  }
 })
 
 onMounted(() => { void loadTodaySchedule() })
