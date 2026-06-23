@@ -111,13 +111,24 @@ async function callLLMDirectAPI(payload: ConsultQuestionPayload): Promise<Consul
 }
 
 function extractSuggestions(text: string): string[] {
-  const lines = text.split(/[\n\r]+/).filter(Boolean)
-  const result: string[] = []
-  for (const line of lines) {
-    const cleaned = line.replace(/^[0-9]+[.、]?\s*/, '').trim()
-    if (cleaned.length > 4 && cleaned.length < 120) result.push(cleaned)
+  // Try to parse structured JSON response from LLM
+  try {
+    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0])
+      if (Array.isArray(parsed.suggestions) && parsed.suggestions.length > 0) {
+        return parsed.suggestions.filter((s: unknown) => typeof s === 'string' && s.length > 2).slice(0, 3)
+      }
+    }
+  } catch {
+    // Not JSON, use defaults
   }
-  return result.slice(0, 4)
+  // Provide contextual default suggestions instead of parsing the answer text
+  return [
+    '帮我分析一下今天的睡眠质量',
+    '根据数据给我一份恢复建议',
+    '生成明天的健康行动计划',
+  ]
 }
 
 export async function streamConsultQuestion(
