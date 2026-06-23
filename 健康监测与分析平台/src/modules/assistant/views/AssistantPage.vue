@@ -20,7 +20,7 @@
           aria-label="新对话"
           @click="startNewConversation"
         >
-          <iconify-icon icon="solar:chat-round-add-outline" width="20" height="20" />
+          <span class="text-lg font-bold leading-none">+</span>
         </button>
         <button
           type="button"

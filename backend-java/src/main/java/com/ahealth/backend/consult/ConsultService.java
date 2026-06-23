@@ -166,7 +166,7 @@ public class ConsultService {
     List<String> values = new ArrayList<>();
     for (JsonNode item : node) {
       String text = normalizeText(item.asText(""), "");
-      if (!text.isBlank()) {
+      if (!text.isBlank() && !looksLikeDisclaimer(text)) {
         values.add(text);
       }
     }
@@ -174,6 +174,12 @@ public class ConsultService {
       return List.of("我今天适合做什么强度的训练？", "最近睡眠一般，今晚怎么调整？", "上传报告后应该先看哪些风险提示？");
     }
     return values.subList(0, Math.min(3, values.size()));
+  }
+
+  private boolean looksLikeDisclaimer(String text) {
+    return text.contains("本建议") || text.contains("非医疗") || text.contains("遵医嘱")
+        || text.contains("不替代") || text.contains("仅供参考") || text.contains("请咨询医生")
+        || text.contains("专业医疗") || text.contains("医疗诊断") || text.contains("咨询医生");
   }
 
   private String normalizeText(String value, String fallback) {
