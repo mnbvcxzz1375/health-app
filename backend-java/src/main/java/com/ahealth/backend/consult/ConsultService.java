@@ -1,7 +1,9 @@
 package com.ahealth.backend.consult;
 
+import com.ahealth.backend.ai.AiDtos;
 import com.ahealth.backend.ai.DashScopeService;
 import com.ahealth.backend.ai.ModelRouterService;
+import com.ahealth.backend.ai.PiiScrubService;
 import com.ahealth.backend.common.ApiException;
 import com.ahealth.backend.common.CurrentUser;
 import com.ahealth.backend.context.ContextDtos;
@@ -33,16 +35,18 @@ public class ConsultService {
 
   private final DashScopeService dashScopeService;
   private final ModelRouterService modelRouterService;
+  private final PiiScrubService piiScrubService;
   private final ContextService contextService;
   private final HealthKnowledgeService knowledgeService;
   private final JdbcTemplate jdbc;
   private final ObjectMapper objectMapper;
 
   public ConsultService(DashScopeService dashScopeService, ModelRouterService modelRouterService,
-      ContextService contextService,
+      PiiScrubService piiScrubService, ContextService contextService,
       HealthKnowledgeService knowledgeService, JdbcTemplate jdbc, ObjectMapper objectMapper) {
     this.dashScopeService = dashScopeService;
     this.modelRouterService = modelRouterService;
+    this.piiScrubService = piiScrubService;
     this.contextService = contextService;
     this.knowledgeService = knowledgeService;
     this.jdbc = jdbc;
@@ -77,9 +81,13 @@ public class ConsultService {
     // Build context-aware message with knowledge injection
     String userMessage = buildContextAwareMessage(request.scene(), question) + knowledgeBlock;
 
+    // PII scrub: mask sensitive info before sending to LLM
+    AiDtos.PiiScrubResult scrubResult = piiScrubService.scrub(userMessage);
+    String safeMessage = scrubResult.scrubbedText();
+
     JsonNode payload = dashScopeService.requestJson(
         ASSISTANT_SYSTEM_PROMPT,
-        userMessage,
+        safeMessage,
         dashScopeService.chatModel(),
         0.35,
         "智能助手"
@@ -91,6 +99,10 @@ public class ConsultService {
         payload.path("disclaimer").asText(""),
         "以上内容仅用于健康管理辅助，不替代医生诊疗。"
     );
+
+    // Restore PII: replace [PERSON_1] etc. back to real values
+    answer = piiScrubService.restore(answer, scrubResult.masks());
+    disclaimer = piiScrubService.restore(disclaimer, scrubResult.masks());
 
     String requestId = "consult_" + UUID.randomUUID().toString().replace("-", "");
     asyncSaveMemory(requestId, question, answer);
