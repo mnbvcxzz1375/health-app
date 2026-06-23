@@ -1,6 +1,8 @@
 package com.ahealth.backend.medication;
 
+import com.ahealth.backend.ai.AiDtos;
 import com.ahealth.backend.ai.DashScopeService;
+import com.ahealth.backend.ai.DdiKnowledgeService;
 import com.ahealth.backend.common.ApiException;
 import com.ahealth.backend.common.CurrentUser;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -54,16 +56,19 @@ public class MedicationService {
 
   private final JdbcTemplate jdbcTemplate;
   private final DashScopeService dashScopeService;
+  private final DdiKnowledgeService ddiKnowledgeService;
   private final String customMedicationRecognizeUrl;
   private final RestTemplate restTemplate;
 
   public MedicationService(
       JdbcTemplate jdbcTemplate,
       DashScopeService dashScopeService,
+      DdiKnowledgeService ddiKnowledgeService,
       @Value("${custom.medication.recognize-url:}") String customMedicationRecognizeUrl
   ) {
     this.jdbcTemplate = jdbcTemplate;
     this.dashScopeService = dashScopeService;
+    this.ddiKnowledgeService = ddiKnowledgeService;
     this.customMedicationRecognizeUrl = customMedicationRecognizeUrl == null ? "" : customMedicationRecognizeUrl.trim();
     SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
     requestFactory.setConnectTimeout(10_000);
@@ -1015,5 +1020,12 @@ public class MedicationService {
         .count();
 
     return new MedicationDtos.TodayScheduleResponse(today, items, items.size(), completed);
+  }
+
+  public List<AiDtos.DdiWarning> checkDrugInteractions() {
+    long uid = CurrentUser.requireUserId();
+    List<String> drugNames = jdbcTemplate.queryForList(
+        "SELECT name FROM medications WHERE user_id=? AND enabled=1", String.class, uid);
+    return ddiKnowledgeService.checkInteractions(drugNames);
   }
 }

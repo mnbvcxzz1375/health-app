@@ -1,5 +1,6 @@
 package com.ahealth.backend.medication;
 
+import com.ahealth.backend.ai.AiDtos;
 import java.util.List;
 import java.util.Map;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -105,5 +106,10 @@ public class MedicationController {
   @GetMapping("/medications/today")
   public MedicationDtos.TodayScheduleResponse todaySchedule() {
     return medicationService.getTodaySchedule();
+  }
+
+  @GetMapping("/medications/interactions")
+  public List<AiDtos.DdiWarning> checkInteractions() {
+    return medicationService.checkDrugInteractions();
   }
 }

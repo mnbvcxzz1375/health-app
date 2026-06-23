@@ -89,6 +89,39 @@ public class BackendSchemaInitializer {
         """
     );
 
+    // DDI knowledge base
+    jdbcTemplate.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ddi_knowledge (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          drug_a VARCHAR(120) NOT NULL,
+          drug_b VARCHAR(120) NOT NULL,
+          severity VARCHAR(16) NOT NULL DEFAULT 'moderate',
+          description TEXT NOT NULL,
+          recommendation TEXT NOT NULL,
+          source VARCHAR(255) DEFAULT '',
+          INDEX idx_ddi_drug_a (drug_a),
+          INDEX idx_ddi_drug_b (drug_b)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """
+    );
+
+    // Seed DDI data
+    jdbcTemplate.execute(
+        """
+        INSERT IGNORE INTO ddi_knowledge (drug_a, drug_b, severity, description, recommendation) VALUES
+        ('降压药', '钙片', 'low', '钙片可能轻微影响降压药吸收', '建议间隔 2 小时服用'),
+        ('降压药', '降压药', 'high', '同类降压药重复使用可能导致低血压', '请确认是否为同一药物的不同名称'),
+        ('阿莫西林', '华法林', 'high', '阿莫西林可能增强华法林的抗凝效果，增加出血风险', '需密切监测 INR 值，必要时调整华法林剂量'),
+        ('阿司匹林', '华法林', 'high', '两者合用显著增加消化道出血风险', '避免合用，如必须合用需加用胃黏膜保护剂'),
+        ('布洛芬', '降压药', 'moderate', 'NSAIDs 可能减弱降压药效果并增加肾脏负担', '建议使用对乙酰氨基酚替代，或密切监测血压'),
+        ('他汀类', '红霉素', 'moderate', '红霉素抑制他汀代谢，增加横纹肌溶解风险', '暂停他汀或换用阿奇霉素'),
+        ('二甲双胍', '碘造影剂', 'high', '合用可能导致乳酸酸中毒', '造影前 48 小时停用二甲双胍，造影后 48 小时恢复'),
+        ('感冒药', '降压药', 'moderate', '部分感冒药含伪麻黄碱可升高血压', '选择不含减充血剂的感冒药，或咨询药师'),
+        ('安眠药', '抗过敏药', 'moderate', '两者均有镇静作用，合用加重嗜睡', '避免同时服用，调整服药时间')
+        """
+    );
+
     // Apple HealthKit 扩展列
     ensureColumn("rehab_exercises", "user_id", "ALTER TABLE rehab_exercises ADD COLUMN user_id INT NULL");
     ensureColumn("analyze_tasks", "report_json", "ALTER TABLE analyze_tasks ADD COLUMN report_json LONGTEXT");
