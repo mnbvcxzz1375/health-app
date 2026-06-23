@@ -613,3 +613,27 @@ export async function saveRehabPlanSettings(payload: RehabPlanSettings): Promise
 }
 
 export { normalizeRehabPlanDraft }
+
+export type ExerciseAnalysis = {
+  exerciseName: string
+  performanceLevel: 'excellent' | 'good' | 'overexertion' | 'underperformance' | 'no_device_data' | 'not_completed'
+  avgHeartRate: number
+  maxHeartRate: number
+  actualDurationSeconds: number
+  targetDurationSeconds: number
+  exertionScore: number
+  note: string
+}
+
+export type RehabPerformanceAnalysis = {
+  date: string
+  exerciseAnalyses: ExerciseAnalysis[]
+  overallAssessment: string
+  warnings: string[]
+  planAdjustments: string[]
+}
+
+export async function getRehabAnalysis(): Promise<RehabPerformanceAnalysis> {
+  const { data } = await http.get<RehabPerformanceAnalysis>('/rehab/analysis')
+  return data
+}

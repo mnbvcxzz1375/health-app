@@ -3,6 +3,8 @@ package com.ahealth.backend.rehab;
 import com.ahealth.backend.common.ApiException;
 import com.ahealth.backend.common.CurrentUser;
 import com.ahealth.backend.common.JsonSupport;
+import com.ahealth.backend.device.RookDtos;
+import com.ahealth.backend.device.RookService;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -21,10 +23,12 @@ public class RehabService {
 
   private final JdbcTemplate jdbcTemplate;
   private final JsonSupport jsonSupport;
+  private final RookService rookService;
 
-  public RehabService(JdbcTemplate jdbcTemplate, JsonSupport jsonSupport) {
+  public RehabService(JdbcTemplate jdbcTemplate, JsonSupport jsonSupport, RookService rookService) {
     this.jdbcTemplate = jdbcTemplate;
     this.jsonSupport = jsonSupport;
+    this.rookService = rookService;
   }
 
   public RehabDtos.RehabPlanResponse getPlan() {
@@ -650,4 +654,124 @@ public class RehabService {
       case SUNDAY -> "周日";
     };
   }
+
+  /**
+   * Analyze rehab performance using device data from ROOK.
+   * Compares actual activity during exercise windows against plan targets.
+   */
+  public RehabDtos.RehabPerformanceAnalysis analyzeRehabPerformance(long uid) {
+    String today = LocalDate.now().toString();
+
+    // Get today's plan items
+    var planItems = jdbcTemplate.queryForList(
+        "SELECT rpi.id, rpi.done, re.name, re.minutes FROM rehab_plan_items rpi "
+        + "JOIN rehab_exercises re ON re.id = rpi.exercise_id "
+        + "WHERE rpi.user_id=? AND rpi.scheduled_date=?", uid, today);
+
+    // Try to get device activity data from ROOK
+    List<RookDtos.ActivityEvent> activities = List.of();
+    RookDtos.PhysicalHealthSummary physical = null;
+    try {
+      if (rookService.isConfigured()) {
+        activities = rookService.getActivityEvents(String.valueOf(uid), today);
+        physical = rookService.getPhysicalHealthSummary(String.valueOf(uid), today);
+      }
+    } catch (Exception e) {
+      // Device data unavailable — analysis will be limited
+    }
+
+    List<RehabDtos.ExerciseAnalysis> analyses = new ArrayList<>();
+    List<String> warnings = new ArrayList<>();
+    List<String> adjustments = new ArrayList<>();
+
+    for (var item : planItems) {
+      String name = (String) item.get("name");
+      int targetMinutes = ((Number) item.get("minutes")).intValue();
+      boolean done = ((Number) item.get("done")).intValue() == 1;
+
+      if (!done) {
+        analyses.add(new RehabDtos.ExerciseAnalysis(
+            name, "not_completed", 0, 0, 0, targetMinutes * 60, 0, "未完成"));
+        continue;
+      }
+
+      // Match activity events to this exercise
+      RookDtos.ActivityEvent matched = findMatchingActivity(activities, name);
+
+      if (matched == null) {
+        analyses.add(new RehabDtos.ExerciseAnalysis(
+            name, "no_device_data", 0, 0, targetMinutes * 60, targetMinutes * 60, 0.5,
+            "无设备数据，无法评估运动强度"));
+        continue;
+      }
+
+      double avgHr = matched.heartRate().avgBpm();
+      double maxHr = matched.heartRate().maxBpm();
+      int actualSeconds = matched.durationSeconds();
+      double exertion = calculateExertion(avgHr, maxHr, actualSeconds, targetMinutes * 60);
+
+      String level;
+      String note;
+      if (exertion > 0.85) {
+        level = "overexertion";
+        note = "运动强度过高，建议降低强度或缩短时间";
+        warnings.add(name + "：运动强度过高（心率 " + (int) avgHr + " bpm）");
+        adjustments.add(name + "：建议减少 1-2 组，或降低阻力");
+      } else if (exertion < 0.3) {
+        level = "underperformance";
+        note = "运动强度偏低，可适当增加";
+        adjustments.add(name + "：可增加组数或延长保持时间");
+      } else if (exertion > 0.7) {
+        level = "good";
+        note = "运动强度良好，保持当前节奏";
+      } else {
+        level = "excellent";
+        note = "运动状态优秀";
+      }
+
+      analyses.add(new RehabDtos.ExerciseAnalysis(
+          name, level, avgHr, maxHr, actualSeconds, targetMinutes * 60, exertion, note));
+    }
+
+    // Overall assessment
+    long overexertionCount = analyses.stream().filter(a -> "overexertion".equals(a.performanceLevel())).count();
+    String overall = overexertionCount > 0 ? "存在过度运动风险，请注意调整" : "康复训练状态良好";
+
+    // Add HRV-based recovery recommendation
+    if (physical != null && physical.heartRate().hrvAvgRmssd() > 0) {
+      double rmssd = physical.heartRate().hrvAvgRmssd();
+      if (rmssd < 25) {
+        warnings.add("HRV 偏低（" + (int) rmssd + " ms），建议今天降低训练强度");
+        adjustments.add("今日建议：低强度恢复训练，优先休息");
+      } else if (rmssd > 60) {
+        adjustments.add("HRV 状态良好，可适当增加训练强度");
+      }
+    }
+
+    return new RehabDtos.RehabPerformanceAnalysis(
+        today, analyses, overall, warnings, adjustments);
+  }
+
+  private RookDtos.ActivityEvent findMatchingActivity(List<RookDtos.ActivityEvent> activities, String exerciseName) {
+    // Match by activity type keywords
+    for (RookDtos.ActivityEvent event : activities) {
+      String type = event.activityType().toLowerCase();
+      if ((exerciseName.contains("划船") || exerciseName.contains("row")) && type.contains("strength")) return event;
+      if ((exerciseName.contains("拉伸") || exerciseName.contains("stretch")) && type.contains("yoga")) return event;
+      if ((exerciseName.contains("狗") || exerciseName.contains("虫") || exerciseName.contains("core"))
+          && (type.contains("strength") || type.contains("functional"))) return event;
+    }
+    // Fallback: return the first activity if only one
+    return activities.size() == 1 ? activities.get(0) : null;
+  }
+
+  private double calculateExertion(double avgHr, double maxHr, int actualSeconds, int targetSeconds) {
+    // Exertion = HR intensity * duration ratio
+    // Max HR estimate: 220 - 30 = 190 (default age 30)
+    double hrIntensity = clamp((avgHr - 60) / 130.0, 0, 1); // 60-190 range normalized to 0-1
+    double durationRatio = targetSeconds > 0 ? clamp((double) actualSeconds / targetSeconds, 0, 2) : 1;
+    return clamp(hrIntensity * 0.7 + (durationRatio > 1 ? 0.3 : durationRatio * 0.3), 0, 1);
+  }
+
+  private double clamp(double v, double lo, double hi) { return Math.max(lo, Math.min(hi, v)); }
 }

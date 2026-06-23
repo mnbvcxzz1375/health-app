@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ahealth.backend.common.CurrentUser;
+
 @RestController
 @RequestMapping("/api/rehab")
 public class RehabController {
@@ -71,5 +73,10 @@ public class RehabController {
   @PostMapping("/plan/reminder")
   public RehabDtos.PlanReminderDraft savePlanReminder(@RequestBody RehabDtos.PlanReminderDraft request) {
     return rehabService.savePlanReminder(request);
+  }
+
+  @GetMapping("/analysis")
+  public RehabDtos.RehabPerformanceAnalysis analyzePerformance() {
+    return rehabService.analyzeRehabPerformance(CurrentUser.requireUserId());
   }
 }

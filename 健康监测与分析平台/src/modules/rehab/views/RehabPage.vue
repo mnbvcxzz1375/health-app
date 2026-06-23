@@ -207,6 +207,43 @@
       </ClinicalSurfaceCard>
     </div>
 
+    <!-- Device-based performance analysis -->
+    <ClinicalSurfaceCard v-if="performanceAnalysis" eyebrow="Device Analysis" title="设备数据分析">
+      <div class="mb-2 flex items-center gap-2">
+        <iconify-icon icon="solar:health-outline" width="18" height="18" class="text-teal-700" />
+        <span class="text-sm font-medium text-teal-800">{{ performanceAnalysis.overallAssessment }}</span>
+      </div>
+
+      <div v-for="a in performanceAnalysis.exerciseAnalyses" :key="a.exerciseName" class="mb-2 rounded-xl border p-3"
+        :class="a.performanceLevel === 'overexertion' ? 'border-red-200 bg-red-50' : a.performanceLevel === 'underperformance' ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'">
+        <div class="flex items-center justify-between">
+          <span class="text-sm font-medium">{{ a.exerciseName }}</span>
+          <span class="rounded-full px-2 py-0.5 text-xs"
+            :class="a.performanceLevel === 'overexertion' ? 'bg-red-100 text-red-700' : a.performanceLevel === 'excellent' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'">
+            {{ performanceLabel(a.performanceLevel) }}
+          </span>
+        </div>
+        <p class="mt-1 text-xs text-slate-600">{{ a.note }}</p>
+        <div v-if="a.avgHeartRate > 0" class="mt-1 flex gap-3 text-xs text-slate-500">
+          <span>平均心率 {{ Math.round(a.avgHeartRate) }} bpm</span>
+          <span>最高心率 {{ Math.round(a.maxHeartRate) }} bpm</span>
+        </div>
+      </div>
+
+      <div v-if="performanceAnalysis.warnings.length" class="mt-2 space-y-1">
+        <div v-for="(w, i) in performanceAnalysis.warnings" :key="i"
+          class="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-1.5 text-xs text-amber-800">
+          <iconify-icon icon="solar:danger-triangle-outline" width="12" height="12" class="mt-0.5 shrink-0" />
+          {{ w }}
+        </div>
+      </div>
+
+      <div v-if="performanceAnalysis.planAdjustments.length" class="mt-2 space-y-1">
+        <p class="text-xs font-medium text-teal-700">AI 调整建议：</p>
+        <p v-for="(adj, i) in performanceAnalysis.planAdjustments" :key="i" class="text-xs text-teal-600">{{ adj }}</p>
+      </div>
+    </ClinicalSurfaceCard>
+
     <ClinicalSurfaceCard
       eyebrow="Action List"
       title="今日动作清单"
@@ -321,6 +358,7 @@ import type { EChartsCoreOption } from 'echarts'
 import { useRouter } from 'vue-router'
 import {
   createRehabVideoTask,
+  getRehabAnalysis,
   getRehabPlan,
   getRehabPlanSettings,
   getRehabVideoTask,
@@ -328,6 +366,7 @@ import {
   saveRehabPlanSettings,
   toggleRehabExercise,
   type RehabExercise,
+  type RehabPerformanceAnalysis,
   type RehabPlanSettings,
   type RehabPlanSummary,
   type RehabReminderSummary,
@@ -362,6 +401,25 @@ const reminderSummary = ref<RehabReminderSummary>({
   channel: '未开启',
   status: '未设置',
 })
+
+const performanceAnalysis = ref<RehabPerformanceAnalysis | null>(null)
+
+const loadAnalysis = async () => {
+  try {
+    performanceAnalysis.value = await getRehabAnalysis()
+  } catch { /* no device data available */ }
+}
+
+const performanceLabel = (level: string) => {
+  switch (level) {
+    case 'excellent': return '优秀'
+    case 'good': return '良好'
+    case 'overexertion': return '过度运动'
+    case 'underperformance': return '强度不足'
+    case 'not_completed': return '未完成'
+    default: return '无数据'
+  }
+}
 
 const doneCount = computed(() => todayExercises.value.filter((x) => x.done).length)
 const progress = computed(() => {
@@ -662,6 +720,7 @@ const weekChartOption = computed<EChartsCoreOption>(() => ({
 onMounted(() => {
   void loadPlan()
   void loadPlanSettings()
+  void loadAnalysis()
 })
 
 onBeforeUnmount(() => {

@@ -96,4 +96,24 @@ public final class RehabDtos {
       List<DraftExerciseCandidate> exercises,
       PlanReminderDraft reminder
   ) {}
+
+  /** Device-based rehab performance analysis */
+  public record RehabPerformanceAnalysis(
+      String date,
+      List<ExerciseAnalysis> exerciseAnalyses,
+      String overallAssessment,
+      List<String> warnings,
+      List<String> planAdjustments
+  ) {}
+
+  public record ExerciseAnalysis(
+      String exerciseName,
+      String performanceLevel,   // "excellent", "good", "overexertion", "underperformance", "no_device_data", "not_completed"
+      double avgHeartRate,
+      double maxHeartRate,
+      int actualDurationSeconds,
+      int targetDurationSeconds,
+      double exertionScore,      // 0-1, >0.8 = overexertion risk
+      String note
+  ) {}
 }
