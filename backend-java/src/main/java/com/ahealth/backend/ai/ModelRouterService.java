@@ -2,6 +2,9 @@ package com.ahealth.backend.ai;
 
 import com.ahealth.backend.context.ContextDtos;
 import com.ahealth.backend.context.ContextService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
@@ -12,31 +15,27 @@ public class ModelRouterService {
   private final MedicalNerService medicalNerService;
   private final DashScopeService dashScopeService;
   private final ContextService contextService;
+  private final ObjectMapper objectMapper;
 
   public ModelRouterService(
       OpenMedService openMedService,
       PiiScrubService piiScrubService,
       MedicalNerService medicalNerService,
       DashScopeService dashScopeService,
-      ContextService contextService
+      ContextService contextService,
+      ObjectMapper objectMapper
   ) {
     this.openMedService = openMedService;
     this.piiScrubService = piiScrubService;
     this.medicalNerService = medicalNerService;
     this.dashScopeService = dashScopeService;
     this.contextService = contextService;
+    this.objectMapper = objectMapper;
   }
 
   /**
    * Route a health question through the optimal model pipeline.
-   *
-   * Pipeline:
-   * 1. PII scrub on user input (if OpenMed configured)
-   * 2. Intent classification (rule-based from question keywords)
-   * 3. Model selection based on intent
-   * 4. Context injection from user health profile
-   * 5. Model call with appropriate system prompt
-   * 6. Memory write-back
+   * Returns the raw JSON string from the LLM (answer/suggestions/disclaimer).
    */
   public String routeHealthQuestion(String question, String scene) {
     // Step 1: PII scrub
@@ -53,19 +52,33 @@ public class ModelRouterService {
     String systemPrompt = buildSystemPrompt(intent, scene);
     String userMessage = contextBlock + "\n问题：" + safeQuestion;
 
-    String response;
+    JsonNode payload;
     if (openMedService.isConfigured() && intent.equals("medication")) {
-      // Use OpenMed for medication-specific questions
-      response = dashScopeService.requestText(
+      payload = dashScopeService.requestJson(
           systemPrompt, userMessage, dashScopeService.chatModel(), 0.35, "药物咨询");
     } else {
-      // Default to DashScope for general health questions
-      response = dashScopeService.requestText(
+      payload = dashScopeService.requestJson(
           systemPrompt, userMessage, dashScopeService.chatModel(), 0.35, "健康咨询");
     }
 
     // Step 5: Restore PII in response if needed
-    return piiScrubService.restore(response, scrubResult.masks());
+    String answer = piiScrubService.restore(
+        dashScopeService.extractAssistantText(payload.path("choices").path(0).path("message").path("content")),
+        scrubResult.masks());
+
+    // Return as proper JSON string
+    try {
+      return objectMapper.writeValueAsString(payload);
+    } catch (JsonProcessingException e) {
+      return "{\"answer\":\"" + escapeJson(answer) + "\",\"suggestions\":[],\"disclaimer\":\"仅用于健康管理辅助。\"}";
+    }
+  }
+
+  private String escapeJson(String s) {
+    if (s == null) return "";
+    return s.replace("\\", "\\\\").replace("\"", "\\\"")
+            .replace("\n", "\\n").replace("\r", "\\r")
+            .replace("\t", "\\t");
   }
 
   private String classifyIntent(String question) {

@@ -77,24 +77,13 @@ public class ConsultService {
     // Build context-aware message with knowledge injection
     String userMessage = buildContextAwareMessage(request.scene(), question) + knowledgeBlock;
 
-    // Route through model router for intent-based model selection + PII scrubbing
-    String routedAnswer = modelRouterService.routeHealthQuestion(userMessage, request.scene());
-
-    // Parse the routed response as JSON
-    JsonNode payload;
-    try {
-      payload = objectMapper.readTree(routedAnswer);
-    } catch (JsonProcessingException e) {
-      // Fallback: treat as plain text answer wrapped in expected format
-      var node = objectMapper.createObjectNode();
-      node.put("answer", routedAnswer);
-      var arr = node.putArray("suggestions");
-      arr.add("请帮我看看今天的监测数据");
-      arr.add("我的睡眠质量如何改善");
-      arr.add("有哪些需要注意的健康风险");
-      node.put("disclaimer", "仅用于健康管理辅助，不替代医生诊疗。");
-      payload = node;
-    }
+    JsonNode payload = dashScopeService.requestJson(
+        ASSISTANT_SYSTEM_PROMPT,
+        userMessage,
+        dashScopeService.chatModel(),
+        0.35,
+        "智能助手"
+    );
 
     String answer = normalizeText(payload.path("answer").asText(""), "建议先结合近期监测趋势、症状变化和康复安排综合判断。");
     List<String> suggestions = normalizeSuggestions(payload.path("suggestions"));
