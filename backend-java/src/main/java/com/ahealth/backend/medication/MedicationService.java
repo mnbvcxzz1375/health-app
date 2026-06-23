@@ -4,6 +4,7 @@ import com.ahealth.backend.ai.AiDtos;
 import com.ahealth.backend.ai.DashScopeService;
 import com.ahealth.backend.ai.DdiKnowledgeService;
 import com.ahealth.backend.ai.MedicalNerService;
+import com.ahealth.backend.ai.OcrPreprocessService;
 import com.ahealth.backend.common.ApiException;
 import com.ahealth.backend.common.CurrentUser;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -59,6 +60,7 @@ public class MedicationService {
   private final DashScopeService dashScopeService;
   private final DdiKnowledgeService ddiKnowledgeService;
   private final MedicalNerService medicalNerService;
+  private final OcrPreprocessService ocrPreprocessService;
   private final String customMedicationRecognizeUrl;
   private final RestTemplate restTemplate;
 
@@ -67,12 +69,14 @@ public class MedicationService {
       DashScopeService dashScopeService,
       DdiKnowledgeService ddiKnowledgeService,
       MedicalNerService medicalNerService,
+      OcrPreprocessService ocrPreprocessService,
       @Value("${custom.medication.recognize-url:}") String customMedicationRecognizeUrl
   ) {
     this.jdbcTemplate = jdbcTemplate;
     this.dashScopeService = dashScopeService;
     this.ddiKnowledgeService = ddiKnowledgeService;
     this.medicalNerService = medicalNerService;
+    this.ocrPreprocessService = ocrPreprocessService;
     this.customMedicationRecognizeUrl = customMedicationRecognizeUrl == null ? "" : customMedicationRecognizeUrl.trim();
     SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
     requestFactory.setConnectTimeout(10_000);
@@ -305,6 +309,70 @@ public class MedicationService {
         "药品识别"
     );
     return normalizeMedicationRecognitionBatch(payload);
+  }
+
+  /**
+   * Recognize medication using PharmaDetect NER on OCR/preprocessed text.
+   * Cross-validates NER entities with LLM recognition for higher confidence.
+   */
+  public MedicationDtos.MedicationRecognitionBatchResult recognizeByNer(String ocrText) {
+    if (ocrText == null || ocrText.isBlank()) {
+      return new MedicationDtos.MedicationRecognitionBatchResult(List.of(), 0.0);
+    }
+
+    // Preprocess OCR text through character confusion correction + field extraction
+    OcrPreprocessService.PreprocessedOcrResult preprocessed = ocrPreprocessService.preprocess(ocrText);
+    String cleanedText = preprocessed.cleanedText();
+
+    // Extract entities via PharmaDetect NER
+    List<AiDtos.NerEntity> entities = medicalNerService.extractMedicationEntities(cleanedText);
+    Map<String, String> nerFields = medicalNerService.entitiesToMedicationFields(entities);
+
+    // Merge: prefer NER fields, fill gaps with regex-extracted fields
+    Map<String, String> regexFields = preprocessed.extractedFields();
+    String name = firstNonBlank(nerFields.get("name"), regexFields.get("name"), "");
+    if (name.isBlank()) {
+      return new MedicationDtos.MedicationRecognitionBatchResult(List.of(), 0.0);
+    }
+
+    String dosageStr = firstNonBlank(nerFields.get("dosage"), regexFields.get("dosageValue"), "");
+    Integer dosageValue = parseDosageValueString(dosageStr);
+    String dosageUnit = firstNonBlank(regexFields.get("dosageUnit"), "片");
+    String usage = firstNonBlank(nerFields.get("usage"), nerFields.get("route"), regexFields.get("usage"), "饭后");
+
+    double avgConfidence = entities.stream()
+        .mapToDouble(AiDtos.NerEntity::confidence)
+        .average().orElse(0.0);
+
+    MedicationDtos.MedicationRecognitionResult result =
+        new MedicationDtos.MedicationRecognitionResult(
+            name, regexFields.getOrDefault("alias", ""),
+            dosageValue, dosageUnit, usage,
+            firstNonBlank(regexFields.get("warnings"), ""),
+            "", avgConfidence, ocrText
+        );
+
+    return new MedicationDtos.MedicationRecognitionBatchResult(List.of(result), avgConfidence);
+  }
+
+  private Integer parseDosageValueString(String text) {
+    if (text == null || text.isBlank()) return null;
+    try {
+      // Extract first number from string like "500mg", "0.5g", "1片"
+      var matcher = NUMBER_PATTERN.matcher(text);
+      if (matcher.find()) {
+        double val = Double.parseDouble(matcher.group(1));
+        return (int) Math.round(val);
+      }
+    } catch (NumberFormatException ignored) {}
+    return null;
+  }
+
+  private String firstNonBlank(String... values) {
+    for (String v : values) {
+      if (v != null && !v.isBlank()) return v.trim();
+    }
+    return "";
   }
 
   public List<MedicationDtos.MedicationAlarm> listAlarms() {
@@ -894,16 +962,6 @@ public class MedicationService {
       case "按需", "as_needed" -> "按需";
       default -> "";
     };
-  }
-
-  private String firstNonBlank(String... values) {
-    for (String value : values) {
-      String text = sanitizeText(value);
-      if (!text.isBlank()) {
-        return text;
-      }
-    }
-    return "";
   }
 
   private String sanitizeText(String value) {

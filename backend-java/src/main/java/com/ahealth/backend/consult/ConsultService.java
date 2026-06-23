@@ -1,6 +1,7 @@
 package com.ahealth.backend.consult;
 
 import com.ahealth.backend.ai.DashScopeService;
+import com.ahealth.backend.ai.ModelRouterService;
 import com.ahealth.backend.common.ApiException;
 import com.ahealth.backend.common.CurrentUser;
 import com.ahealth.backend.context.ContextDtos;
@@ -31,14 +32,17 @@ public class ConsultService {
       """;
 
   private final DashScopeService dashScopeService;
+  private final ModelRouterService modelRouterService;
   private final ContextService contextService;
   private final HealthKnowledgeService knowledgeService;
   private final JdbcTemplate jdbc;
   private final ObjectMapper objectMapper;
 
-  public ConsultService(DashScopeService dashScopeService, ContextService contextService,
+  public ConsultService(DashScopeService dashScopeService, ModelRouterService modelRouterService,
+      ContextService contextService,
       HealthKnowledgeService knowledgeService, JdbcTemplate jdbc, ObjectMapper objectMapper) {
     this.dashScopeService = dashScopeService;
+    this.modelRouterService = modelRouterService;
     this.contextService = contextService;
     this.knowledgeService = knowledgeService;
     this.jdbc = jdbc;
@@ -73,13 +77,24 @@ public class ConsultService {
     // Build context-aware message with knowledge injection
     String userMessage = buildContextAwareMessage(request.scene(), question) + knowledgeBlock;
 
-    JsonNode payload = dashScopeService.requestJson(
-        ASSISTANT_SYSTEM_PROMPT,
-        userMessage,
-        dashScopeService.chatModel(),
-        0.35,
-        "智能助手"
-    );
+    // Route through model router for intent-based model selection + PII scrubbing
+    String routedAnswer = modelRouterService.routeHealthQuestion(userMessage, request.scene());
+
+    // Parse the routed response as JSON
+    JsonNode payload;
+    try {
+      payload = objectMapper.readTree(routedAnswer);
+    } catch (JsonProcessingException e) {
+      // Fallback: treat as plain text answer wrapped in expected format
+      var node = objectMapper.createObjectNode();
+      node.put("answer", routedAnswer);
+      var arr = node.putArray("suggestions");
+      arr.add("请帮我看看今天的监测数据");
+      arr.add("我的睡眠质量如何改善");
+      arr.add("有哪些需要注意的健康风险");
+      node.put("disclaimer", "仅用于健康管理辅助，不替代医生诊疗。");
+      payload = node;
+    }
 
     String answer = normalizeText(payload.path("answer").asText(""), "建议先结合近期监测趋势、症状变化和康复安排综合判断。");
     List<String> suggestions = normalizeSuggestions(payload.path("suggestions"));
