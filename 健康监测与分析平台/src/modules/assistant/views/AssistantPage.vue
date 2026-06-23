@@ -17,6 +17,14 @@
         <button
           type="button"
           class="ml-auto inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/90 text-slate-900 shadow-sm transition hover:bg-white"
+          aria-label="新对话"
+          @click="startNewConversation"
+        >
+          <iconify-icon icon="solar:chat-round-add-outline" width="20" height="20" />
+        </button>
+        <button
+          type="button"
+          class="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/90 text-slate-900 shadow-sm transition hover:bg-white"
           aria-label="历史记录"
           @click="showHistory = !showHistory"
         >
@@ -61,7 +69,7 @@
                   : 'border border-white/85 bg-white text-slate-900'
               "
             >
-              <p class="whitespace-pre-wrap text-sm leading-7">{{ message.content || '正在生成回答...' }}</p>
+              <p class="whitespace-pre-wrap text-sm leading-7" v-html="renderMarkdown(message.content || '正在生成回答...')"></p>
               <div v-if="message.knowledgeSources?.length" class="mt-2 text-xs text-slate-400">
                 <span>参考：</span>
                 <span v-for="(src, i) in message.knowledgeSources" :key="i">{{ src }}{{ i < message.knowledgeSources.length - 1 ? '、' : '' }}</span>
@@ -256,6 +264,19 @@ function createMessageId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+/** Simple markdown-to-HTML renderer for assistant messages */
+function renderMarkdown(text: string): string {
+  if (!text) return ''
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`(.+?)`/g, '<code class="rounded bg-slate-100 px-1 py-0.5 text-xs text-slate-700">$1</code>')
+    .replace(/\n/g, '<br>')
+}
+
 function persistMessages() {
   if (typeof window === 'undefined') return
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(messages.value.slice(-30)))
@@ -361,6 +382,13 @@ function goBack() {
     return
   }
   router.push('/home')
+}
+
+function startNewConversation() {
+  messages.value = createWelcomeMessages()
+  showHistory.value = false
+  persistMessages()
+  void scrollMessagesToBottom()
 }
 
 watch(
