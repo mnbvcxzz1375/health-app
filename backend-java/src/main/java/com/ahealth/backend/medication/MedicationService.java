@@ -3,6 +3,7 @@ package com.ahealth.backend.medication;
 import com.ahealth.backend.ai.AiDtos;
 import com.ahealth.backend.ai.DashScopeService;
 import com.ahealth.backend.ai.DdiKnowledgeService;
+import com.ahealth.backend.ai.MedicalNerService;
 import com.ahealth.backend.common.ApiException;
 import com.ahealth.backend.common.CurrentUser;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -57,6 +58,7 @@ public class MedicationService {
   private final JdbcTemplate jdbcTemplate;
   private final DashScopeService dashScopeService;
   private final DdiKnowledgeService ddiKnowledgeService;
+  private final MedicalNerService medicalNerService;
   private final String customMedicationRecognizeUrl;
   private final RestTemplate restTemplate;
 
@@ -64,11 +66,13 @@ public class MedicationService {
       JdbcTemplate jdbcTemplate,
       DashScopeService dashScopeService,
       DdiKnowledgeService ddiKnowledgeService,
+      MedicalNerService medicalNerService,
       @Value("${custom.medication.recognize-url:}") String customMedicationRecognizeUrl
   ) {
     this.jdbcTemplate = jdbcTemplate;
     this.dashScopeService = dashScopeService;
     this.ddiKnowledgeService = ddiKnowledgeService;
+    this.medicalNerService = medicalNerService;
     this.customMedicationRecognizeUrl = customMedicationRecognizeUrl == null ? "" : customMedicationRecognizeUrl.trim();
     SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
     requestFactory.setConnectTimeout(10_000);
