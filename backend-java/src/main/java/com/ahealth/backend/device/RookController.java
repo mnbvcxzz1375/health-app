@@ -49,6 +49,12 @@ public class RookController {
     return rookService.getActivityEvents(userId, date);
   }
 
+  /** Sync ROOK device data to monitor_records for health scoring */
+  @PostMapping("/sync")
+  public Map<String, Object> syncData() {
+    return rookService.syncToMonitorRecords(CurrentUser.requireUserId());
+  }
+
   /** Check if ROOK is configured */
   @GetMapping("/status")
   public Map<String, Object> status() {

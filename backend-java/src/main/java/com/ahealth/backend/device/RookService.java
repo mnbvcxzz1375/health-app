@@ -205,6 +205,52 @@ public class RookService {
     );
   }
 
+  /**
+   * Sync ROOK physical + sleep data to monitor_records table.
+   * This feeds the health scoring engine with real device data.
+   */
+  public Map<String, Object> syncToMonitorRecords(long uid) {
+    String today = java.time.LocalDate.now().toString();
+
+    RookDtos.PhysicalHealthSummary physical = getPhysicalHealthSummary(String.valueOf(uid), today);
+    RookDtos.SleepHealthSummary sleep = getSleepHealthSummary(String.valueOf(uid), today);
+
+    int hr = (int) physical.heartRate().restingBpm();
+    if (hr <= 0) hr = (int) physical.heartRate().avgBpm();
+    int sleepScore = sleep.scores().qualityRating() * 20; // 1-5 → 20-100
+    double deepHours = sleep.duration().deepSleepSeconds() / 3600.0;
+    int awakeTimes = sleep.duration().timeAwakeDuringSleepSeconds() > 0 ? 1 : 0;
+    int stressScore = (int) (physical.stress().avgLevel() * 10); // 0-10 → 0-100
+    int hrv = (int) physical.heartRate().hrvAvgRmssd();
+    int steps = physical.distance().steps();
+    double vo2 = physical.oxygenation().vo2Max();
+
+    // Insert or update today's record
+    Integer existing = jdbc.queryForObject(
+        "SELECT COUNT(*) FROM monitor_records WHERE DATE(recorded_at) = CURDATE() AND HOUR(recorded_at) = HOUR(NOW())",
+        Integer.class);
+
+    if (existing != null && existing > 0) {
+      jdbc.update(
+          "UPDATE monitor_records SET hr=?, sleep_score=?, deep_sleep_hours=?, awake_times=?, "
+          + "stress_score=?, hrv_millis=?, steps=?, vo2_max=? "
+          + "WHERE DATE(recorded_at)=CURDATE() AND HOUR(recorded_at)=HOUR(NOW())",
+          hr, sleepScore, deepHours, awakeTimes, stressScore, hrv, steps, vo2);
+    } else {
+      jdbc.update(
+          "INSERT INTO monitor_records(recorded_at, hr, sleep_score, deep_sleep_hours, awake_times, "
+          + "stress_score, hrv_millis, steps, vo2_max) VALUES(NOW(), ?, ?, ?, ?, ?, ?, ?, ?)",
+          hr, sleepScore, deepHours, awakeTimes, stressScore, hrv, steps, vo2);
+    }
+
+    return Map.of(
+        "synced", true,
+        "hr", hr, "sleepScore", sleepScore, "stressScore", stressScore,
+        "hrv", hrv, "steps", steps, "vo2Max", vo2,
+        "deepSleepHours", deepHours
+    );
+  }
+
   private RookDtos.ActivityEvent parseActivityEvent(JsonNode node) {
     JsonNode hr = node.path("heart_rate");
     JsonNode mv = node.path("movement");
