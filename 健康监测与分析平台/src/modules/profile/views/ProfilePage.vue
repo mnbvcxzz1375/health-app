@@ -61,6 +61,47 @@
       </div>
     </ClinicalSurfaceCard>
 
+    <ClinicalSurfaceCard title="健康设备">
+      <p class="text-sm text-slate-600">连接健康设备数据源，获取更全面的健康数据。</p>
+
+      <div class="mt-3 flex flex-wrap gap-2">
+        <Button :loading="sourcesLoading" @click="handleLoadSources">
+          <template v-if="!sourcesLoading" #leading>
+            <iconify-icon icon="solar:devices-bold-duotone" width="18" height="18" />
+          </template>
+          刷新设备状态
+        </Button>
+      </div>
+
+      <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div
+          v-for="ds in dataSources"
+          :key="ds.id"
+          class="flex items-center gap-3 rounded-[1.4rem] border px-4 py-3.5 shadow-[var(--elevation-soft)]"
+          :class="ds.authorized
+            ? 'border-emerald-300 bg-emerald-50/60'
+            : 'border-[color:var(--surface-border)] bg-[color:var(--surface-primary)]'"
+        >
+          <iconify-icon :icon="ds.icon" width="28" height="28" class="shrink-0 text-slate-700" />
+
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-semibold text-slate-950">{{ ds.label }}</p>
+            <p class="text-xs" :class="ds.authorized ? 'text-emerald-600' : 'text-slate-500'">
+              {{ ds.authorized ? '已连接' : '未连接' }}
+            </p>
+          </div>
+
+          <Button
+            :variant="ds.authorized ? 'secondary' : 'primary'"
+            :loading="authorizingSource === ds.id"
+            @click="handleAuthorize(ds.id)"
+          >
+            {{ ds.authorized ? '重新授权' : '连接' }}
+          </Button>
+        </div>
+      </div>
+    </ClinicalSurfaceCard>
+
     <ClinicalSurfaceCard title="数据与隐私">
       <div class="space-y-2.5">
         <ActionRow title="数据安全" icon="Database" @click="openSecurity" />
@@ -92,7 +133,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { syncRookData, type RookSyncResult } from '@/api/modules/rook'
+import { syncRookData, authorizeDataSource, getAuthorizedSources, type RookSyncResult } from '@/api/modules/rook'
 import { getProfileSummary, updateProfileAvatar } from '@/api/modules/profile'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
@@ -133,6 +174,65 @@ let confirmTimer: number | null = null
 
 const syncing = ref(false)
 const syncResult = ref<RookSyncResult | null>(null)
+
+type DeviceSource = {
+  id: string
+  label: string
+  icon: string
+  authorized: boolean
+}
+
+const allDataSources: DeviceSource[] = [
+  { id: 'garmin', label: 'Garmin', icon: 'solar:watch-square-bold-duotone', authorized: false },
+  { id: 'apple_health', label: 'Apple Health', icon: 'solar:heart-pulse-bold-duotone', authorized: false },
+  { id: 'fitbit', label: 'Fitbit', icon: 'solar:watch-round-bold-duotone', authorized: false },
+  { id: 'oura', label: 'Oura', icon: 'solar:moon-stars-bold-duotone', authorized: false },
+  { id: 'withings', label: 'Withings', icon: 'solar:scales-bold-duotone', authorized: false },
+]
+
+const dataSources = ref<DeviceSource[]>(allDataSources.map((d) => ({ ...d })))
+const sourcesLoading = ref(false)
+const authorizingSource = ref<string | null>(null)
+
+const handleLoadSources = async () => {
+  sourcesLoading.value = true
+  try {
+    const result = await getAuthorizedSources()
+    const authMap = result.sources ?? {}
+    dataSources.value = allDataSources.map((d) => ({
+      ...d,
+      authorized: authMap[d.id] ?? authMap[d.label.toLowerCase()] ?? false,
+    }))
+    const connectedCount = dataSources.value.filter((d) => d.authorized).length
+    stats.value.devices = connectedCount > 0 ? `${connectedCount} 台` : '0 台'
+    if (connectedCount > 0) {
+      success('设备状态已更新', `已连接 ${connectedCount} 个数据源。`)
+    } else {
+      info('暂无设备', '您尚未连接任何健康设备。')
+    }
+  } catch (err) {
+    error('加载失败', err instanceof Error ? err.message : '请稍后重试')
+  } finally {
+    sourcesLoading.value = false
+  }
+}
+
+const handleAuthorize = async (sourceId: string) => {
+  authorizingSource.value = sourceId
+  try {
+    const result = await authorizeDataSource(sourceId)
+    if (result.authorizationUrl) {
+      window.open(result.authorizationUrl, '_blank', 'noopener')
+      info('授权窗口已打开', '请在新窗口中完成授权，完成后回到此页面刷新设备状态。')
+    } else {
+      warning('授权失败', '未能获取授权链接，请稍后重试。')
+    }
+  } catch (err) {
+    error('授权失败', err instanceof Error ? err.message : '请稍后重试')
+  } finally {
+    authorizingSource.value = null
+  }
+}
 
 const handleSync = async () => {
   syncing.value = true
@@ -244,5 +344,6 @@ const loadProfileSummary = async () => {
 
 onMounted(() => {
   void loadProfileSummary()
+  void handleLoadSources()
 })
 </script>
