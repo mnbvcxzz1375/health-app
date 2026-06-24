@@ -81,17 +81,26 @@ public class ConsultService {
     // Build context-aware message with knowledge injection
     String userMessage = buildContextAwareMessage(request.scene(), question) + knowledgeBlock;
 
-    // PII scrub: mask sensitive info before sending to LLM
-    AiDtos.PiiScrubResult scrubResult = piiScrubService.scrub(userMessage);
-    String safeMessage = scrubResult.scrubbedText();
+    // Route through ModelRouterService: PII scrub + intent classification + model selection
+    String routedJson = modelRouterService.routeHealthQuestion(userMessage, request.scene());
 
-    JsonNode payload = dashScopeService.requestJson(
-        ASSISTANT_SYSTEM_PROMPT,
-        safeMessage,
-        dashScopeService.chatModel(),
-        0.35,
-        "智能助手"
-    );
+    JsonNode payload;
+    try {
+      payload = objectMapper.readTree(routedJson);
+    } catch (Exception e) {
+      // Fallback: direct DashScope call if router fails
+      AiDtos.PiiScrubResult scrubResult = piiScrubService.scrub(userMessage);
+      payload = dashScopeService.requestJson(
+          ASSISTANT_SYSTEM_PROMPT, scrubResult.scrubbedText(),
+          dashScopeService.chatModel(), 0.35, "智能助手");
+      // Restore PII
+      String fallbackAnswer = payload.path("answer").asText("");
+      var node = objectMapper.createObjectNode();
+      node.put("answer", piiScrubService.restore(fallbackAnswer, scrubResult.masks()));
+      node.putArray("suggestions");
+      node.put("disclaimer", payload.path("disclaimer").asText("仅用于健康管理辅助。"));
+      payload = node;
+    }
 
     String answer = normalizeText(payload.path("answer").asText(""), "建议先结合近期监测趋势、症状变化和康复安排综合判断。");
     List<String> suggestions = normalizeSuggestions(payload.path("suggestions"));
@@ -99,10 +108,6 @@ public class ConsultService {
         payload.path("disclaimer").asText(""),
         "以上内容仅用于健康管理辅助，不替代医生诊疗。"
     );
-
-    // Restore PII: replace [PERSON_1] etc. back to real values
-    answer = piiScrubService.restore(answer, scrubResult.masks());
-    disclaimer = piiScrubService.restore(disclaimer, scrubResult.masks());
 
     String requestId = "consult_" + UUID.randomUUID().toString().replace("-", "");
     asyncSaveMemory(requestId, question, answer);

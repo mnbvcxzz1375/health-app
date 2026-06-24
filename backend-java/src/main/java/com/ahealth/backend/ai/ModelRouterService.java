@@ -35,7 +35,7 @@ public class ModelRouterService {
 
   /**
    * Route a health question through the optimal model pipeline.
-   * Returns the raw JSON string from the LLM (answer/suggestions/disclaimer).
+   * Returns JSON string in {answer, suggestions, disclaimer} format.
    */
   public String routeHealthQuestion(String question, String scene) {
     // Step 1: PII scrub
@@ -48,8 +48,10 @@ public class ModelRouterService {
     // Step 3: Determine model based on question content
     String intent = classifyIntent(safeQuestion);
 
-    // Step 4: Build prompt and call model
-    String systemPrompt = buildSystemPrompt(intent, scene);
+    // Step 4: Build prompt and call model (use ASSISTANT_SYSTEM_PROMPT from ConsultService for JSON output)
+    String systemPrompt = buildSystemPrompt(intent, scene)
+        + "\n请只返回 JSON，不要输出 Markdown。固定结构为："
+        + "{\"answer\":\"...\",\"suggestions\":[\"...\",\"...\",\"...\"],\"disclaimer\":\"...\"}";
     String userMessage = contextBlock + "\n问题：" + safeQuestion;
 
     JsonNode payload;
@@ -61,14 +63,21 @@ public class ModelRouterService {
           systemPrompt, userMessage, dashScopeService.chatModel(), 0.35, "健康咨询");
     }
 
-    // Step 5: Restore PII in response if needed
-    String answer = piiScrubService.restore(
-        dashScopeService.extractAssistantText(payload.path("choices").path(0).path("message").path("content")),
-        scrubResult.masks());
+    // Step 5: Restore PII in answer
+    String answer = payload.path("answer").asText("");
+    answer = piiScrubService.restore(answer, scrubResult.masks());
 
-    // Return as proper JSON string
+    // Build response in expected format
     try {
-      return objectMapper.writeValueAsString(payload);
+      var node = objectMapper.createObjectNode();
+      node.put("answer", answer);
+      var arr = node.putArray("suggestions");
+      JsonNode suggestionsNode = payload.path("suggestions");
+      if (suggestionsNode.isArray()) {
+        for (JsonNode s : suggestionsNode) arr.add(s.asText(""));
+      }
+      node.put("disclaimer", payload.path("disclaimer").asText("仅用于健康管理辅助。"));
+      return objectMapper.writeValueAsString(node);
     } catch (JsonProcessingException e) {
       return "{\"answer\":\"" + escapeJson(answer) + "\",\"suggestions\":[],\"disclaimer\":\"仅用于健康管理辅助。\"}";
     }

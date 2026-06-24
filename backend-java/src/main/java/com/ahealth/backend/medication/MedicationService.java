@@ -314,17 +314,34 @@ public class MedicationService {
     );
     MedicationDtos.MedicationRecognitionBatchResult batch = normalizeMedicationRecognitionBatch(payload);
 
-    // PII scrub: mask patient names, doctor signatures in OCR text
-    List<MedicationDtos.MedicationRecognitionResult> scrubbed = new ArrayList<>();
+    // OCR preprocessing: enrich results with character correction + field extraction
+    List<MedicationDtos.MedicationRecognitionResult> enriched = new ArrayList<>();
     for (MedicationDtos.MedicationRecognitionResult item : batch.items()) {
+      String sourceText = item.sourceText();
+      if (sourceText != null && !sourceText.isBlank()) {
+        OcrPreprocessService.PreprocessedOcrResult preprocessed = ocrPreprocessService.preprocess(sourceText);
+        Map<String, String> extracted = preprocessed.extractedFields();
+        // Enrich: fill missing fields from OCR preprocessing
+        String enrichedName = item.name();
+        if (enrichedName == null || enrichedName.isBlank()) enrichedName = extracted.getOrDefault("name", "");
+        String enrichedNotes = item.notes();
+        if (enrichedNotes == null || enrichedNotes.isBlank()) enrichedNotes = extracted.getOrDefault("warnings", "");
+        sourceText = preprocessed.cleanedText(); // Use corrected text
+        item = new MedicationDtos.MedicationRecognitionResult(
+            enrichedName, item.alias(), item.dosageValue(), item.dosageUnit(),
+            item.usage(), enrichedNotes, item.photoUrl(), item.confidence(), sourceText
+        );
+      }
+
+      // PII scrub
       String safeNotes = piiScrubService.scrub(item.notes()).scrubbedText();
       String safeSourceText = piiScrubService.scrub(item.sourceText()).scrubbedText();
-      scrubbed.add(new MedicationDtos.MedicationRecognitionResult(
+      enriched.add(new MedicationDtos.MedicationRecognitionResult(
           item.name(), item.alias(), item.dosageValue(), item.dosageUnit(),
           item.usage(), safeNotes, item.photoUrl(), item.confidence(), safeSourceText
       ));
     }
-    return new MedicationDtos.MedicationRecognitionBatchResult(scrubbed, batch.confidence());
+    return new MedicationDtos.MedicationRecognitionBatchResult(enriched, batch.confidence());
   }
 
   /**

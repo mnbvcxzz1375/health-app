@@ -86,6 +86,15 @@ public class MedicationController {
     return medicationService.recognizeByModel(files);
   }
 
+  /** NER-based recognition: OCR preprocess → PharmaDetect NER → field extraction */
+  @PostMapping("/medications/recognize-ner")
+  public MedicationDtos.MedicationRecognitionBatchResult recognizeByNer(
+      @RequestBody Map<String, String> body
+  ) {
+    String ocrText = body.getOrDefault("text", "");
+    return medicationService.recognizeByNer(ocrText);
+  }
+
   @PostMapping("/medications/recognize/custom-model")
   public MedicationDtos.MedicationRecognitionBatchResult recognizeByCustomModel(
       @RequestParam("files") MultipartFile[] files
