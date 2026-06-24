@@ -38,6 +38,29 @@
       </div>
     </ClinicalSurfaceCard>
 
+    <ClinicalSurfaceCard title="健康数据同步">
+      <p class="text-sm text-slate-600">从已连接设备同步最新健康数据。</p>
+
+      <div class="mt-3">
+        <Button :loading="syncing" @click="handleSync">
+          <template v-if="!syncing" #leading>
+            <iconify-icon icon="solar:refresh-circle-bold-duotone" width="18" height="18" />
+          </template>
+          同步健康数据
+        </Button>
+      </div>
+
+      <div v-if="syncResult" class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <ClinicalStatCard label="心率" :value="`${syncResult.hr} bpm`" icon="solar:heart-pulse-bold-duotone" tone="danger" />
+        <ClinicalStatCard label="睡眠评分" :value="String(syncResult.sleepScore)" icon="solar:moon-sleep-bold-duotone" tone="info" />
+        <ClinicalStatCard label="压力评分" :value="String(syncResult.stressScore)" icon="solar:danger-bold-duotone" tone="warning" />
+        <ClinicalStatCard label="HRV" :value="`${syncResult.hrv} ms`" icon="solar:pulse-2-bold-duotone" tone="success" />
+        <ClinicalStatCard label="步数" :value="String(syncResult.steps)" icon="solar:walking-round-bold-duotone" />
+        <ClinicalStatCard label="VO2 Max" :value="`${syncResult.vo2Max} ml/kg`" icon="solar:lungs-bold-duotone" tone="info" />
+        <ClinicalStatCard label="深度睡眠" :value="`${syncResult.deepSleepHours} h`" icon="solar:moon-stars-bold-duotone" tone="default" />
+      </div>
+    </ClinicalSurfaceCard>
+
     <ClinicalSurfaceCard title="数据与隐私">
       <div class="space-y-2.5">
         <ActionRow title="数据安全" icon="Database" @click="openSecurity" />
@@ -69,12 +92,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { syncRookData, type RookSyncResult } from '@/api/modules/rook'
 import { getProfileSummary, updateProfileAvatar } from '@/api/modules/profile'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
 import ActionRow from '@/shared/components/ActionRow.vue'
 import ClinicalPageHeader from '@/shared/components/clinical/ClinicalPageHeader.vue'
 import ClinicalSurfaceCard from '@/shared/components/clinical/ClinicalSurfaceCard.vue'
+import ClinicalStatCard from '@/shared/components/clinical/ClinicalStatCard.vue'
 import Badge from '@/shared/components/ui/Badge.vue'
 import Button from '@/shared/components/ui/Button.vue'
 
@@ -105,6 +130,27 @@ const deleting = ref(false)
 const loggingOut = ref(false)
 const confirmDelete = ref(false)
 let confirmTimer: number | null = null
+
+const syncing = ref(false)
+const syncResult = ref<RookSyncResult | null>(null)
+
+const handleSync = async () => {
+  syncing.value = true
+  syncResult.value = null
+  try {
+    const result = await syncRookData()
+    if (result.synced) {
+      syncResult.value = result
+      success('同步完成', '健康数据已更新。')
+    } else {
+      warning('同步失败', '未能获取最新数据，请稍后重试。')
+    }
+  } catch (err) {
+    error('同步失败', err instanceof Error ? err.message : '请稍后重试')
+  } finally {
+    syncing.value = false
+  }
+}
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 

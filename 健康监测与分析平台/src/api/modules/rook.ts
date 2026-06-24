@@ -65,3 +65,19 @@ export async function getActivityEvents(date: string): Promise<ActivityEvent[]> 
   const { data } = await http.get(`/device/rook/activities/${date}`)
   return data as ActivityEvent[]
 }
+
+export type RookSyncResult = {
+  synced: boolean
+  hr: number
+  sleepScore: number
+  stressScore: number
+  hrv: number
+  steps: number
+  vo2Max: number
+  deepSleepHours: number
+}
+
+export async function syncRookData(): Promise<RookSyncResult> {
+  const { data } = await http.post('/device/rook/sync')
+  return data as RookSyncResult
+}
