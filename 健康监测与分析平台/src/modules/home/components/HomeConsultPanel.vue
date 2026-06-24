@@ -9,22 +9,30 @@
     />
 
     <div class="mt-3 flex flex-wrap gap-2">
-      <button
+      <v-chip
         v-for="chip in chips"
         :key="chip"
-        type="button"
-        class="rounded-full border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-[color:var(--accent-soft)] hover:bg-white"
+        variant="outlined"
+        size="small"
+        label
+        clickable
         @click="$emit('pick-chip', chip)"
       >
         {{ chip }}
-      </button>
+      </v-chip>
     </div>
 
     <div class="mt-4 flex justify-end">
-      <Button :loading="loading" :disabled="!question.trim()" @click="$emit('submit')">
-        <iconify-icon icon="solar:chat-round-line-outline" width="16" height="16" />
+      <v-btn
+        color="primary"
+        :loading="loading"
+        :disabled="!question.trim()"
+        rounded="lg"
+        @click="$emit('submit')"
+      >
+        <iconify-icon icon="solar:chat-round-line-outline" width="16" height="16" class="mr-1" />
         获取建议
-      </Button>
+      </v-btn>
     </div>
 
     <div
@@ -56,7 +64,6 @@
 <script setup lang="ts">
 import type { ConsultResponse } from '@/api/modules/consult'
 import ClinicalSurfaceCard from '@/shared/components/clinical/ClinicalSurfaceCard.vue'
-import Button from '@/shared/components/ui/Button.vue'
 
 defineProps<{
   question: string

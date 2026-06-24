@@ -2,12 +2,9 @@
   <div class="space-y-5 pb-4 text-slate-950 lg:space-y-6 lg:pb-6">
     <HomeHeroOverview :summary="summary" :display-name="displayName" :today="today" />
 
-    <ClinicalStateNotice
-      v-if="viewState === 'loading'"
-      tone="loading"
-      title="正在加载总览"
-      description="正在整理首页数据。"
-    />
+    <v-card v-if="viewState === 'loading'" class="pa-4" rounded="xl" elevation="0">
+      <v-skeleton-loader type="card, card, card" />
+    </v-card>
 
     <ClinicalStateNotice
       v-else-if="viewState === 'error'"
@@ -93,13 +90,9 @@
           </div>
         </div>
 
-        <ClinicalStateNotice
-          v-if="trendLoading"
-          class="mt-4"
-          tone="loading"
-          title="正在生成趋势解读"
-          description="请稍候。"
-        />
+        <v-card v-if="trendLoading" class="mt-4 pa-4" rounded="xl" elevation="0">
+          <v-skeleton-loader type="article, actions" />
+        </v-card>
 
         <ClinicalStateNotice
           v-else-if="trendError"
@@ -163,7 +156,14 @@
                       </p>
                     </div>
                     <div class="flex items-center gap-2">
-                      <Badge :variant="toReportRiskTone(item.report.riskLevel)">{{ item.report.riskLevel }}</Badge>
+                      <v-chip
+                        :color="riskLevelColor(item.report.riskLevel)"
+                        size="small"
+                        variant="tonal"
+                        label
+                      >
+                        {{ item.report.riskLevel }}
+                      </v-chip>
                       <button
                         type="button"
                         class="rounded-full border border-[color:var(--surface-border)] px-3 py-1 text-xs font-medium text-slate-600 transition hover:bg-[color:var(--surface-secondary)]"
@@ -214,7 +214,14 @@
 
           <ClinicalSurfaceCard title="风险提示">
             <template #headerRight>
-              <Badge :variant="statusTone">{{ summary?.statusBadge ?? '总览' }}</Badge>
+              <v-chip
+                :color="statusChipColor"
+                size="small"
+                variant="tonal"
+                label
+              >
+                {{ summary?.statusBadge ?? '总览' }}
+              </v-chip>
             </template>
 
             <div class="space-y-2">
@@ -317,7 +324,14 @@
             </p>
           </div>
           <div class="flex items-center gap-2">
-            <Badge :variant="toReportRiskTone(selectedReport.report.riskLevel)">{{ selectedReport.report.riskLevel }}</Badge>
+            <v-chip
+              :color="riskLevelColor(selectedReport.report.riskLevel)"
+              size="small"
+              variant="tonal"
+              label
+            >
+              {{ selectedReport.report.riskLevel }}
+            </v-chip>
             <button
               type="button"
               class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--surface-border)] text-slate-500 transition hover:bg-[color:var(--surface-secondary)] hover:text-slate-900"
@@ -384,7 +398,6 @@ import EChartCanvas from '@/shared/components/EChartCanvas.vue'
 import ClinicalStateNotice from '@/shared/components/clinical/ClinicalStateNotice.vue'
 import ClinicalStatCard from '@/shared/components/clinical/ClinicalStatCard.vue'
 import ClinicalSurfaceCard from '@/shared/components/clinical/ClinicalSurfaceCard.vue'
-import Badge from '@/shared/components/ui/Badge.vue'
 import Button from '@/shared/components/ui/Button.vue'
 import { formatDateCN } from '@/shared/utils/date'
 import { useAuthStore } from '@/stores/auth'
@@ -460,6 +473,20 @@ const suggestions = computed(() => {
   return items.length ? items : ['请先上传资料或连接设备。']
 })
 const statusTone = computed(() => toRiskTone(summary.value?.statusBadgeVariant))
+const statusChipColor = computed(() => {
+  const tone = statusTone.value
+  if (tone === 'danger') return 'error'
+  if (tone === 'warning') return 'warning'
+  if (tone === 'success') return 'success'
+  if (tone === 'info') return 'info'
+  return 'grey'
+})
+
+const riskLevelColor = (riskLevel: string) => {
+  if (riskLevel === '高风险') return 'error'
+  if (riskLevel === '中等风险') return 'warning'
+  return 'success'
+}
 
 const heartHint = computed(() => {
   if (latest.value.hr >= 95) return '训练前建议先观察恢复状态。'
@@ -521,12 +548,6 @@ const reportTypeLabel = (type: string) => {
   if (type === 'lab') return '化验报告'
   if (type === 'symptom') return '症状描述'
   return '文字报告'
-}
-
-const toReportRiskTone = (riskLevel: string) => {
-  if (riskLevel === '高风险') return 'danger'
-  if (riskLevel === '中等风险') return 'warning'
-  return 'success'
 }
 
 const formatReportTime = (value: string) => {

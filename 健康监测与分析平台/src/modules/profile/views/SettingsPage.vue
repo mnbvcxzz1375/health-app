@@ -39,65 +39,61 @@
 
     <div class="grid gap-4 xl:grid-cols-[1fr_0.95fr]">
       <ClinicalSurfaceCard eyebrow="基础档案" title="基础信息" description="保持资料最新，建议才会更准确。">
-        <div class="grid gap-3 sm:grid-cols-2">
-          <label class="block">
-            <span class="text-xs text-slate-500">姓名</span>
-            <input
+        <v-form>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <v-text-field
               v-model="form.name"
-              class="mt-1 w-full rounded-[1rem] border border-[color:var(--surface-border)] px-3 py-2.5 text-sm outline-none focus:border-[color:var(--ring)]"
+              label="姓名"
+              density="comfortable"
+              hide-details="auto"
             />
-          </label>
 
-          <label class="block">
-            <span class="text-xs text-slate-500">邮箱</span>
-            <input
+            <v-text-field
               v-model="form.email"
-              class="mt-1 w-full rounded-[1rem] border border-[color:var(--surface-border)] bg-slate-50 px-3 py-2.5 text-sm text-slate-500 outline-none"
+              label="邮箱"
+              density="comfortable"
+              hide-details="auto"
               disabled
             />
-          </label>
 
-          <label class="block">
-            <span class="text-xs text-slate-500">年龄</span>
-            <input
+            <v-text-field
               v-model.number="form.age"
+              label="年龄"
               type="number"
               min="1"
-              class="mt-1 w-full rounded-[1rem] border border-[color:var(--surface-border)] px-3 py-2.5 text-sm outline-none focus:border-[color:var(--ring)]"
+              density="comfortable"
+              hide-details="auto"
             />
-          </label>
 
-          <label class="block">
-            <span class="text-xs text-slate-500">性别</span>
-            <AppSelect
+            <v-select
               v-model="form.gender"
-              class="mt-1"
-              ariaLabel="性别"
-              placeholder="请选择"
-              :options="genderOptions"
+              :items="genderOptions"
+              item-title="label"
+              item-value="value"
+              label="性别"
+              density="comfortable"
+              hide-details="auto"
             />
-          </label>
 
-          <label class="block">
-            <span class="text-xs text-slate-500">身高 (cm)</span>
-            <input
+            <v-text-field
               v-model.number="form.height"
+              label="身高 (cm)"
               type="number"
               min="80"
-              class="mt-1 w-full rounded-[1rem] border border-[color:var(--surface-border)] px-3 py-2.5 text-sm outline-none focus:border-[color:var(--ring)]"
+              density="comfortable"
+              hide-details="auto"
             />
-          </label>
 
-          <label class="block">
-            <span class="text-xs text-slate-500">体重 (kg)</span>
-            <input
+            <v-text-field
               v-model.number="form.weight"
+              label="体重 (kg)"
               type="number"
               min="30"
-              class="mt-1 w-full rounded-[1rem] border border-[color:var(--surface-border)] px-3 py-2.5 text-sm outline-none focus:border-[color:var(--ring)]"
+              density="comfortable"
+              hide-details="auto"
             />
-          </label>
-        </div>
+          </div>
+        </v-form>
       </ClinicalSurfaceCard>
 
       <ClinicalSurfaceCard eyebrow="健康目标" title="近期关注" description="这些目标会影响后续建议重点。">
@@ -136,35 +132,68 @@
 
     <ClinicalSurfaceCard eyebrow="提醒规则" title="提醒偏好" description="按你的使用节奏控制提醒频率。">
       <div class="grid gap-3 lg:grid-cols-3">
-        <label class="flex items-center justify-between rounded-[1.2rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-3">
+        <div class="flex items-center justify-between rounded-[1.2rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-3">
           <div>
             <p class="text-sm font-semibold text-slate-950">每日摘要</p>
             <p class="mt-1 text-xs text-slate-500">每天晚间推送完成度和趋势变化</p>
           </div>
-          <input v-model="form.dailySummary" type="checkbox" class="h-4 w-4" />
-        </label>
+          <v-switch
+            v-model="form.dailySummary"
+            color="primary"
+            hide-details
+            density="compact"
+            inset
+          />
+        </div>
 
-        <label class="flex items-center justify-between rounded-[1.2rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-3">
+        <div class="flex items-center justify-between rounded-[1.2rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-3">
           <div>
             <p class="text-sm font-semibold text-slate-950">异常提醒</p>
             <p class="mt-1 text-xs text-slate-500">出现异常波动时及时提醒</p>
           </div>
-          <input v-model="form.riskAlert" type="checkbox" class="h-4 w-4" />
-        </label>
+          <v-switch
+            v-model="form.riskAlert"
+            color="primary"
+            hide-details
+            density="compact"
+            inset
+          />
+        </div>
 
-        <label class="flex items-center justify-between rounded-[1.2rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-3">
+        <div class="flex items-center justify-between rounded-[1.2rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-3">
           <div>
             <p class="text-sm font-semibold text-slate-950">康复提醒</p>
             <p class="mt-1 text-xs text-slate-500">按训练节奏提醒动作执行</p>
           </div>
-          <input v-model="form.rehabReminder" type="checkbox" class="h-4 w-4" />
-        </label>
+          <v-switch
+            v-model="form.rehabReminder"
+            color="primary"
+            hide-details
+            density="compact"
+            inset
+          />
+        </div>
       </div>
     </ClinicalSurfaceCard>
 
     <div class="grid grid-cols-2 gap-2.5">
-      <Button variant="secondary" :disabled="saving" @click="handleReset">恢复上次保存</Button>
-      <Button :loading="saving" @click="handleSave">保存设置</Button>
+      <v-btn
+        variant="outlined"
+        color="grey-darken-1"
+        :disabled="saving"
+        rounded="lg"
+        @click="handleReset"
+      >
+        恢复上次保存
+      </v-btn>
+      <v-btn
+        color="primary"
+        :loading="saving"
+        rounded="lg"
+        @click="handleSave"
+      >
+        保存设置
+      </v-btn>
     </div>
   </div>
 </template>
@@ -177,7 +206,6 @@ import { useToast } from '@/composables/useToast'
 import ClinicalPageHeader from '@/shared/components/clinical/ClinicalPageHeader.vue'
 import ClinicalStatCard from '@/shared/components/clinical/ClinicalStatCard.vue'
 import ClinicalSurfaceCard from '@/shared/components/clinical/ClinicalSurfaceCard.vue'
-import AppSelect from '@/shared/components/ui/AppSelect.vue'
 import Button from '@/shared/components/ui/Button.vue'
 import { useAuthStore } from '@/stores/auth'
 
