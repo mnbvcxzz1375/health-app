@@ -408,6 +408,202 @@ public class MedicationService {
     return "";
   }
 
+  /**
+   * Unified OCR → NER → LLM cross-validation pipeline.
+   * Chains all three recognition sources and merges results with confidence scores:
+   *   1.0 = LLM and NER agree on a field
+   *   0.8 = only LLM produced the field
+   *   0.7 = only NER produced the field
+   *   fallback = OcrPreprocessService regex extraction
+   */
+  public MedicationDtos.MedicationRecognitionBatchResult recognizeWithFullPipeline(MultipartFile[] files) {
+    MultipartFile[] normalizedFiles = Arrays.stream(files == null ? new MultipartFile[0] : files)
+        .filter(file -> file != null && !file.isEmpty())
+        .toArray(MultipartFile[]::new);
+    if (normalizedFiles.length == 0) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "请先上传药盒图片");
+    }
+
+    // Step 1: DashScope Vision — OCR + initial structuring
+    List<Map<String, Object>> content = new ArrayList<>();
+    content.add(Map.of("type", "text", "text", MEDICATION_RECOGNITION_USER_PROMPT));
+    content.addAll(dashScopeService.toImageBlocks(normalizedFiles));
+
+    JsonNode payload = dashScopeService.requestJson(
+        MEDICATION_RECOGNITION_SYSTEM_PROMPT,
+        content,
+        dashScopeService.visionModel(),
+        0.1,
+        "药品识别(全流水线)"
+    );
+    MedicationDtos.MedicationRecognitionBatchResult batch = normalizeMedicationRecognitionBatch(payload);
+
+    // Step 2-4: For each item, run OCR preprocess → NER → cross-validate → PII scrub
+    List<MedicationDtos.MedicationRecognitionResult> results = new ArrayList<>();
+    for (MedicationDtos.MedicationRecognitionResult llmItem : batch.items()) {
+      String sourceText = llmItem.sourceText();
+      if (sourceText == null || sourceText.isBlank()) {
+        // No source text from LLM — apply PII scrub and pass through
+        String safeNotes = piiScrubService.scrub(llmItem.notes()).scrubbedText();
+        results.add(new MedicationDtos.MedicationRecognitionResult(
+            llmItem.name(), llmItem.alias(), llmItem.dosageValue(), llmItem.dosageUnit(),
+            llmItem.usage(), safeNotes, llmItem.photoUrl(), llmItem.confidence(), ""
+        ));
+        continue;
+      }
+
+      // Step 2: OCR preprocessing — character correction + regex field extraction
+      OcrPreprocessService.PreprocessedOcrResult preprocessed = ocrPreprocessService.preprocess(sourceText);
+      String correctedText = preprocessed.cleanedText();
+      Map<String, String> regexFields = preprocessed.extractedFields();
+
+      // Step 3: NER extraction on corrected text
+      List<AiDtos.NerEntity> entities = medicalNerService.extractMedicationEntities(correctedText);
+      Map<String, String> nerFields = medicalNerService.entitiesToMedicationFields(entities);
+
+      // Step 4: Cross-validate and merge with confidence scoring
+      CrossValidationResult merged = crossValidateFields(llmItem, nerFields, regexFields);
+
+      // Apply PII scrub to final text fields
+      String safeNotes = piiScrubService.scrub(merged.notes).scrubbedText();
+      String safeSourceText = piiScrubService.scrub(correctedText).scrubbedText();
+
+      results.add(new MedicationDtos.MedicationRecognitionResult(
+          merged.name, merged.alias, merged.dosageValue, merged.dosageUnit,
+          merged.usage, safeNotes, llmItem.photoUrl(), merged.confidence, safeSourceText
+      ));
+    }
+
+    // Compute batch-level confidence as average of per-item confidences
+    double batchConfidence = results.stream()
+        .mapToDouble(r -> r.confidence() != null ? r.confidence() : 0.0)
+        .average().orElse(0.0);
+    batchConfidence = Math.round(batchConfidence * 100.0) / 100.0;
+
+    return new MedicationDtos.MedicationRecognitionBatchResult(results, batchConfidence);
+  }
+
+  /**
+   * Cross-validate fields from LLM, NER, and regex extraction.
+   * Agreement between LLM and NER → high confidence (1.0).
+   * Only LLM → medium (0.8). Only NER → medium (0.7). Neither → regex fallback (0.6).
+   */
+  private CrossValidationResult crossValidateFields(
+      MedicationDtos.MedicationRecognitionResult llmItem,
+      Map<String, String> nerFields,
+      Map<String, String> regexFields
+  ) {
+    // Name
+    String llmName = firstNonBlank(llmItem.name());
+    String nerName = firstNonBlank(nerFields.get("name"));
+    String name;
+    double nameConf;
+    if (!llmName.isBlank() && !nerName.isBlank()) {
+      name = llmName; // both agree — use LLM (more structured)
+      nameConf = 1.0;
+    } else if (!llmName.isBlank()) {
+      name = llmName;
+      nameConf = 0.8;
+    } else if (!nerName.isBlank()) {
+      name = nerName;
+      nameConf = 0.7;
+    } else {
+      name = firstNonBlank(regexFields.get("name"), "");
+      nameConf = name.isBlank() ? 0.0 : 0.6;
+    }
+
+    // Dosage value
+    Integer llmDosage = llmItem.dosageValue();
+    String nerDosageStr = firstNonBlank(nerFields.get("dosage"));
+    Integer nerDosage = parseDosageValueString(nerDosageStr);
+    String regexDosageStr = firstNonBlank(regexFields.get("dosageValue"));
+    Integer regexDosage = parseDosageValueString(regexDosageStr);
+
+    Integer dosageValue;
+    double dosageConf;
+    if (llmDosage != null && nerDosage != null) {
+      dosageValue = llmDosage;
+      dosageConf = 1.0;
+    } else if (llmDosage != null) {
+      dosageValue = llmDosage;
+      dosageConf = 0.8;
+    } else if (nerDosage != null) {
+      dosageValue = nerDosage;
+      dosageConf = 0.7;
+    } else {
+      dosageValue = regexDosage;
+      dosageConf = regexDosage != null ? 0.6 : 0.0;
+    }
+
+    // Dosage unit
+    String llmUnit = firstNonBlank(llmItem.dosageUnit());
+    String regexUnit = firstNonBlank(regexFields.get("dosageUnit"));
+    String dosageUnit;
+    double unitConf;
+    if (!llmUnit.isBlank()) {
+      dosageUnit = llmUnit;
+      unitConf = !regexUnit.isBlank() && regexUnit.equals(llmUnit) ? 1.0 : 0.8;
+    } else if (!regexUnit.isBlank()) {
+      dosageUnit = regexUnit;
+      unitConf = 0.7;
+    } else {
+      dosageUnit = "";
+      unitConf = 0.0;
+    }
+
+    // Usage
+    String llmUsage = firstNonBlank(llmItem.usage());
+    String nerUsage = firstNonBlank(nerFields.get("usage"), nerFields.get("route"));
+    String regexUsage = firstNonBlank(regexFields.get("usage"));
+    String usage;
+    double usageConf;
+    if (!llmUsage.isBlank() && !nerUsage.isBlank()) {
+      usage = llmUsage;
+      usageConf = 1.0;
+    } else if (!llmUsage.isBlank()) {
+      usage = llmUsage;
+      usageConf = 0.8;
+    } else if (!nerUsage.isBlank()) {
+      usage = nerUsage;
+      usageConf = 0.7;
+    } else {
+      usage = regexUsage;
+      usageConf = !usage.isBlank() ? 0.6 : 0.0;
+    }
+
+    // Notes / warnings
+    String llmNotes = firstNonBlank(llmItem.notes());
+    String regexWarnings = firstNonBlank(regexFields.get("warnings"));
+    String notes;
+    double notesConf;
+    if (!llmNotes.isBlank()) {
+      notes = llmNotes;
+      notesConf = !regexWarnings.isBlank() ? 1.0 : 0.8;
+    } else {
+      notes = regexWarnings;
+      notesConf = !notes.isBlank() ? 0.7 : 0.0;
+    }
+
+    // Alias — only from LLM
+    String alias = firstNonBlank(llmItem.alias(), "");
+
+    // Weighted average confidence across all fields
+    double totalConf = nameConf + dosageConf + unitConf + usageConf + notesConf;
+    double avgConfidence = Math.round((totalConf / 5.0) * 100.0) / 100.0;
+
+    return new CrossValidationResult(name, alias, dosageValue, dosageUnit, usage, notes, avgConfidence);
+  }
+
+  private record CrossValidationResult(
+      String name,
+      String alias,
+      Integer dosageValue,
+      String dosageUnit,
+      String usage,
+      String notes,
+      double confidence
+  ) {}
+
   public List<MedicationDtos.MedicationAlarm> listAlarms() {
     long userId = CurrentUser.requireUserId();
     List<Map<String, Object>> groups = jdbcTemplate.queryForList(

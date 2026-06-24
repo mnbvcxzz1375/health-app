@@ -95,6 +95,14 @@ public class MedicationController {
     return medicationService.recognizeByNer(ocrText);
   }
 
+  /** Unified OCR → NER → LLM cross-validation pipeline */
+  @PostMapping("/medications/recognize-full")
+  public MedicationDtos.MedicationRecognitionBatchResult recognizeFullPipeline(
+      @RequestParam("files") MultipartFile[] files
+  ) {
+    return medicationService.recognizeWithFullPipeline(files);
+  }
+
   @PostMapping("/medications/recognize/custom-model")
   public MedicationDtos.MedicationRecognitionBatchResult recognizeByCustomModel(
       @RequestParam("files") MultipartFile[] files
