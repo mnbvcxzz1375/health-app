@@ -1,6 +1,6 @@
 <template>
   <article
-    class="rounded-[1.6rem] border px-4 py-3.5 shadow-[var(--elevation-soft)]"
+    class="rounded-[1.6rem] border px-4 py-3.5 shadow-[var(--elevation-soft)] backdrop-blur-xl"
     :class="toneClass"
   >
     <div class="flex items-start justify-between gap-2">
@@ -43,15 +43,15 @@ const props = withDefaults(
 const toneClass = computed(() => {
   switch (props.tone) {
     case 'success':
-      return 'border-emerald-200 bg-emerald-50/85'
+      return 'border-emerald-200/60 bg-emerald-50/40'
     case 'warning':
-      return 'border-amber-200 bg-amber-50/90'
+      return 'border-amber-200/60 bg-amber-50/40'
     case 'danger':
-      return 'border-rose-200 bg-rose-50/90'
+      return 'border-rose-200/60 bg-rose-50/40'
     case 'info':
-      return 'border-sky-200 bg-sky-50/90'
+      return 'border-sky-200/60 bg-sky-50/40'
     default:
-      return 'border-[color:var(--surface-border)] bg-[color:var(--surface-primary)]'
+      return 'border-white/40 bg-white/30'
   }
 })
 </script>

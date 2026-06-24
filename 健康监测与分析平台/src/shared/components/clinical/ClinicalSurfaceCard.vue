@@ -1,5 +1,5 @@
 <template>
-  <section class="rounded-[1.75rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-primary)] shadow-[var(--elevation-soft)]">
+  <section class="rounded-[1.75rem] border border-white/30 bg-white/40 backdrop-blur-xl shadow-[var(--elevation-soft)]">
     <div
       v-if="title || (description && !$slots.default) || $slots.headerRight"
       class="flex items-start justify-between gap-3 border-b border-[color:var(--surface-border)] px-4 py-4 lg:px-5"
