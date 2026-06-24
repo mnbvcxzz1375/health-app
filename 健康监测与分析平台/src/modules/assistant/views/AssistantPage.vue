@@ -178,7 +178,7 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { streamConsultQuestion, getConsultHistory, deleteConsultHistory, clearConsultHistory, type ConsultHistoryItem } from '@/api/modules/consult'
+import { streamConsultSSE, streamConsultQuestion, getConsultHistory, deleteConsultHistory, clearConsultHistory, type ConsultHistoryItem } from '@/api/modules/consult'
 import { assistantPresetQuestions } from '@/modules/assistant/presets'
 
 type AssistantMessage = {
@@ -340,23 +340,41 @@ async function submitQuestion(question: string) {
   await scrollMessagesToBottom()
 
   try {
-    await streamConsultQuestion(
-      {
-        question: normalized,
-        scene: 'assistant',
-      },
-      {
-        onChunk(delta) {
-          pendingMessage.content += delta
+    // Use SSE streaming for real-time character-by-character display
+    let usedSSE = false
+    try {
+      for await (const event of streamConsultSSE(normalized, 'assistant')) {
+        if (event.chunk) {
+          pendingMessage.content += event.chunk
+          usedSSE = true
           void scrollMessagesToBottom()
+        }
+        if (event.done) {
+          pendingMessage.id = event.done.requestId
+          pendingMessage.suggestions = event.done.suggestions
+        }
+      }
+    } catch {
+      // SSE failed, fall through to legacy streaming
+    }
+
+    if (!usedSSE) {
+      // Fallback to the legacy ndjson / direct-LLM streaming path
+      await streamConsultQuestion(
+        { question: normalized, scene: 'assistant' },
+        {
+          onChunk(delta) {
+            pendingMessage.content += delta
+            void scrollMessagesToBottom()
+          },
+          onComplete(response) {
+            pendingMessage.id = response.requestId
+            pendingMessage.content = response.answer || pendingMessage.content
+            pendingMessage.suggestions = response.suggestions
+          },
         },
-        onComplete(response) {
-          pendingMessage.id = response.requestId
-          pendingMessage.content = response.answer || pendingMessage.content
-          pendingMessage.suggestions = response.suggestions
-        },
-      },
-    )
+      )
+    }
   } catch (err) {
     pendingMessage.id = createMessageId('assistant-error')
     pendingMessage.content = readApiErrorMessage(err)

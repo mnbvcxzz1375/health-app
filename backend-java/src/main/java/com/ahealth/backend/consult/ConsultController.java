@@ -6,6 +6,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,12 +17,14 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @RequestMapping("/api/consult")
 public class ConsultController {
   private final ConsultService consultService;
   private final ObjectMapper objectMapper;
+  private final ExecutorService executorService = Executors.newCachedThreadPool();
 
   public ConsultController(ConsultService consultService, ObjectMapper objectMapper) {
     this.consultService = consultService;
@@ -59,6 +64,36 @@ public class ConsultController {
         "disclaimer", result.disclaimer()
     )) + "\n");
     response.flushBuffer();
+  }
+
+  @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+  public SseEmitter streamConsult(
+      @RequestParam String question,
+      @RequestParam(defaultValue = "assistant") String scene) {
+    SseEmitter emitter = new SseEmitter(60_000L);
+    executorService.submit(() -> {
+      try {
+        ConsultDtos.ConsultResponse response = consultService.ask(
+            new ConsultDtos.ConsultQuestionRequest(question, scene));
+        String answer = response.answer();
+        String[] chunks = answer.split("(?<=[。！？\\n])");
+        for (String chunk : chunks) {
+          if (!chunk.isBlank()) {
+            emitter.send(SseEmitter.event().data(chunk.trim()));
+            Thread.sleep(50);
+          }
+        }
+        emitter.send(SseEmitter.event().name("done").data(
+            objectMapper.writeValueAsString(Map.of(
+                "requestId", response.requestId(),
+                "suggestions", response.suggestions(),
+                "disclaimer", response.disclaimer()))));
+        emitter.complete();
+      } catch (Exception e) {
+        emitter.completeWithError(e);
+      }
+    });
+    return emitter;
   }
 
   @GetMapping("/history")

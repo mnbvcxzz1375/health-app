@@ -131,6 +131,58 @@ function extractSuggestions(text: string): string[] {
   ]
 }
 
+/**
+ * SSE streaming via GET endpoint. Yields text chunks as they arrive.
+ * The final "done" event carries metadata (requestId, suggestions, disclaimer).
+ */
+export async function* streamConsultSSE(
+  question: string,
+  scene = 'assistant',
+): AsyncGenerator<{ chunk?: string; done?: { requestId: string; suggestions: string[]; disclaimer: string } }> {
+  const token = readToken()
+  const headers: Record<string, string> = {}
+  if (token) headers['Authorization'] = 'Bearer ' + token
+
+  const response = await fetch(
+    `/api/consult/stream?question=${encodeURIComponent(question)}&scene=${scene}`,
+    { headers },
+  )
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  if (!response.body) throw new Error('No response body')
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+      if (trimmed.startsWith('event:done')) continue
+      if (trimmed.startsWith('data:')) {
+        const payload = trimmed.slice(5).trim()
+        // Check if the next line in the buffer is the done event
+        // The done event's data line contains JSON metadata
+        try {
+          const meta = JSON.parse(payload)
+          if (meta.requestId) {
+            yield { done: { requestId: meta.requestId, suggestions: meta.suggestions ?? [], disclaimer: meta.disclaimer ?? '' } }
+            continue
+          }
+        } catch {
+          // not JSON, it's a text chunk
+        }
+        yield { chunk: payload }
+      }
+    }
+  }
+}
+
 export async function streamConsultQuestion(
   payload: ConsultQuestionPayload,
   handlers: { onChunk?: (delta: string) => void; onComplete?: (response: ConsultResponse) => void },
