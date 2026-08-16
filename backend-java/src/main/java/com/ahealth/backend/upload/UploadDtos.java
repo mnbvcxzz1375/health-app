@@ -1,5 +1,6 @@
 package com.ahealth.backend.upload;
 
+import com.ahealth.backend.ai.AiDtos;
 import com.ahealth.backend.rehab.RehabDtos;
 import java.util.List;
 
@@ -7,6 +8,19 @@ public final class UploadDtos {
   private UploadDtos() {}
 
   public record AnalyzeTaskResponse(String taskId) {}
+
+  /**
+   * 自定义模型分析响应：
+   * - type="bone"：boneAgeResult 必填，analyzeReport 为 null
+   * - 其他类型：analyzeReport 必填，boneAgeResult 为 null；source 用于区分结构化 LLM fallback
+   */
+  public record CustomModelTaskResponse(
+      String taskId,
+      String type,            // "bone" | ...
+      String source,          // "local_model" | "llm_fallback" | ...
+      AiDtos.BoneAgeResult boneAgeResult,
+      AnalyzeReport analyzeReport
+  ) {}
 
   public record AnalyzeReport(
       String title,

@@ -1,4 +1,4 @@
-﻿import axios from 'axios'
+import axios from 'axios'
 import { env } from '@/config/env'
 import { useToastStore } from '@/stores/toast'
 import { useAuthStore } from '@/stores/auth'
@@ -25,7 +25,8 @@ export const http = axios.create({
 
 http.interceptors.request.use((config) => {
   const token = readToken()
-  if (token) {
+  // Skip Authorization header for mock tokens (offline/fallback mode)
+  if (token && !token.startsWith('mock-token-')) {
     config.headers = config.headers ?? {}
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -48,12 +49,16 @@ http.interceptors.response.use(
       return Promise.reject(err)
     }
 
-    try {
-      const toast = useToastStore()
-      const message = err?.response?.data?.message ?? err.message ?? '网络请求失败'
-      toast.error('请求失败', message)
-    } catch {
-      // Pinia 尚未激活时忽略提示
+    // mock 模式、503、网络错误（后端未启动）都不弹 toast，避免噪音
+    const isNetworkError = !err?.response
+    if (!env.useDevMock && status !== 503 && !isNetworkError) {
+      try {
+        const toast = useToastStore()
+        const message = err?.response?.data?.message ?? err.message ?? '网络请求失败'
+        toast.error('请求失败', message)
+      } catch {
+        // Pinia 尚未激活时忽略提示
+      }
     }
     return Promise.reject(err)
   },

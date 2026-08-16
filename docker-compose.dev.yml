@@ -1,0 +1,20 @@
+services:
+  redis-stack:
+    image: redis/redis-stack:7.4.0-v4
+    container_name: ahealth-redis-stack
+    ports:
+      - "6379:6379"      # Redis
+      - "8001:8001"      # RedisInsight Web UI
+    volumes:
+      - redis-data:/data
+    environment:
+      - REDIS_ARGS=--save 60 1 --loglevel warning
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  redis-data:

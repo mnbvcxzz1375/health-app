@@ -1,6 +1,7 @@
 package com.ahealth.backend.medication;
 
 import com.ahealth.backend.ai.AiDtos;
+import com.ahealth.backend.common.CurrentUser;
 import java.util.List;
 import java.util.Map;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -84,6 +85,12 @@ public class MedicationController {
       @RequestParam("files") MultipartFile[] files
   ) {
     return medicationService.recognizeByModel(files);
+  }
+
+  /** 根据中药方剂创建一条 medications 记录，让"用药提醒"统一涵盖方剂。 */
+  @PostMapping("/medications/from-formula/{formulaId}")
+  public MedicationDtos.MedicationItem createFromFormula(@PathVariable long formulaId) {
+    return medicationService.createFormulaMedication(CurrentUser.requireUserId(), formulaId);
   }
 
   /** NER-based recognition: OCR preprocess → PharmaDetect NER → field extraction */

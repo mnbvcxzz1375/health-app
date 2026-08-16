@@ -129,7 +129,7 @@ describe('MedicationPage', () => {
   it('renders today schedule by default and loads data', async () => {
     await renderPage()
     await waitFor(() => expect(mockGetTodaySchedule).toHaveBeenCalled())
-    expect(screen.getByText('今日服药计划')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '今日服药' })).toBeInTheDocument()
   })
 
   it('shows intake confirmation buttons for pending items', async () => {
@@ -155,13 +155,14 @@ describe('MedicationPage', () => {
     await renderPage()
     await waitFor(() => expect(mockGetTodaySchedule).toHaveBeenCalled())
     expect(screen.getByText('扫描识别')).toBeInTheDocument()
-    expect(screen.getByText('我的药物')).toBeInTheDocument()
-    expect(screen.getByText('今日服药')).toBeInTheDocument()
+    expect(screen.getByText('用药闹钟')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '今日服药' })).toBeInTheDocument()
   })
 
   it('renders elder mode toggle', async () => {
     await renderPage()
     await waitFor(() => expect(mockGetTodaySchedule).toHaveBeenCalled())
-    expect(screen.getByText('老人模式')).toBeInTheDocument()
+    await fireEvent.click(screen.getByRole('button', { name: '标准' }))
+    expect(screen.getByRole('button', { name: '老人模式' })).toBeInTheDocument()
   })
 })

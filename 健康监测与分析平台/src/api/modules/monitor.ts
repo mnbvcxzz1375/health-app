@@ -1,8 +1,8 @@
-﻿import { http } from '@/api/http'
+import { http } from '@/api/http'
 import { cloneMock, getMockDb, withMockFallback } from '@/dev/mockApi'
 
 export type MonitorMetric = 'hr' | 'sleep' | 'stress'
-export type MonitorRange = 'hour' | 'day' | 'month'
+export type MonitorRange = 'minute' | 'hour' | 'day' | 'month'
 
 export type MonitorLatest = {
   hr: number

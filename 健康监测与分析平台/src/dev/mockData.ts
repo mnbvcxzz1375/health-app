@@ -1,7 +1,7 @@
-﻿export type MockBadgeVariant = 'success' | 'warning' | 'danger' | 'info' | 'default'
+export type MockBadgeVariant = 'success' | 'warning' | 'danger' | 'info' | 'default'
 export type MockHomeMetricKey = 'hr' | 'stress' | 'hydration'
 export type MockMonitorMetric = 'hr' | 'sleep' | 'stress'
-export type MockMonitorRange = 'hour' | 'day' | 'month'
+export type MockMonitorRange = 'minute' | 'hour' | 'day' | 'month'
 export type MockUploadType = 'image' | 'lab' | 'text' | 'symptom'
 export type MockDeviceType = 'watch' | 'band' | 'ring' | 'other'
 export type MockTaskStatus = 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED'
@@ -232,6 +232,12 @@ const seedMockDb: MockDb = {
   },
   monitorTrends: {
     hr: {
+      minute: {
+        labels: ['09:00', '09:05', '09:10', '09:15', '09:20', '09:25', '09:30', '09:35', '09:40', '09:45', '09:50', '09:55'],
+        values: [71, 72, 70, 71, 72, 73, 71, 70, 71, 72, 71, 72],
+        insight: '最近 1 小时心率波动平稳，处于静息区间。',
+        suggestion: '维持当前节奏，避免连续久坐。',
+      },
       hour: {
         labels: ['09:00', '09:10', '09:20', '09:30', '09:40', '09:50'],
         values: [72, 73, 71, 70, 71, 72],
@@ -252,6 +258,12 @@ const seedMockDb: MockDb = {
       },
     },
     sleep: {
+      minute: {
+        labels: [],
+        values: [],
+        insight: '睡眠数据最小粒度为天，请选择更大的时间范围。',
+        suggestion: '切换到"7 天"或"6 个月"查看睡眠趋势。',
+      },
       hour: {
         labels: ['昨夜'],
         values: [86],
@@ -272,6 +284,12 @@ const seedMockDb: MockDb = {
       },
     },
     stress: {
+      minute: {
+        labels: ['09:00', '09:05', '09:10', '09:15', '09:20', '09:25', '09:30', '09:35', '09:40', '09:45', '09:50', '09:55'],
+        values: [50, 49, 48, 47, 48, 49, 50, 48, 47, 46, 47, 48],
+        insight: '最近 1 小时压力指数逐步下降。',
+        suggestion: '保持深呼吸节奏，继续短间隔休息。',
+      },
       hour: {
         labels: ['09:00', '09:10', '09:20', '09:30', '09:40', '09:50'],
         values: [52, 51, 50, 48, 47, 48],

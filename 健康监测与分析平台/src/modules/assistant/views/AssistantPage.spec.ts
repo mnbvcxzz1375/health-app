@@ -3,9 +3,14 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import AssistantPage from '@/modules/assistant/views/AssistantPage.vue'
 
 const mockStreamConsultQuestion = vi.fn()
+const mockStreamConsultSSE = vi.fn()
 
 vi.mock('@/api/modules/consult', () => ({
   streamConsultQuestion: (...args: unknown[]) => mockStreamConsultQuestion(...args),
+  streamConsultSSE: (...args: unknown[]) => mockStreamConsultSSE(...args),
+  getConsultHistory: vi.fn().mockResolvedValue([]),
+  deleteConsultHistory: vi.fn(),
+  clearConsultHistory: vi.fn(),
 }))
 
 async function renderPage() {
@@ -30,6 +35,8 @@ async function renderPage() {
 describe('AssistantPage', () => {
   beforeEach(() => {
     mockStreamConsultQuestion.mockReset()
+    mockStreamConsultSSE.mockReset()
+    mockStreamConsultSSE.mockImplementation(async function* () {})
     window.localStorage.clear()
   })
 

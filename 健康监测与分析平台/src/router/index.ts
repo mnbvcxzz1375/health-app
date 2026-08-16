@@ -1,17 +1,31 @@
-﻿import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router'
 import { routes } from './routes'
 import { useAuthStore } from '@/stores/auth'
+
+// 保存离开页面时的滚动位置，用于返回时恢复
+const scrollPositions = new Map<string, number>()
 
 const router = createRouter({
   history: createWebHistory(),
   routes,
-  scrollBehavior(_to, _from, savedPosition) {
+  scrollBehavior(to, from, savedPosition) {
+    // 浏览器前进/后退（包括 router.back()）优先使用 savedPosition
     if (savedPosition) return savedPosition
+    // 如果目标路径有存储的滚动位置，恢复它
+    const stored = scrollPositions.get(to.fullPath)
+    if (stored !== undefined) {
+      return { top: stored }
+    }
     return { top: 0 }
   },
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach((to, from, next) => {
+  // 离开前保存当前滚动位置
+  if (from.fullPath && from.fullPath !== '/') {
+    scrollPositions.set(from.fullPath, window.scrollY)
+  }
+
   const authStore = useAuthStore()
   if (!authStore.ready) authStore.hydrate()
 

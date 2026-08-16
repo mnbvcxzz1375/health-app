@@ -84,7 +84,6 @@ export async function createPostureJob(payload: {
 
   try {
     const { data } = await postureHttp.post<PostureJob>('/api/v1/posture/jobs', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
     })
     return data
   } catch (error) {

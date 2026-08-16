@@ -1,0 +1,55 @@
+{
+  "arms": [
+    {
+      "arm": "baseline",
+      "contract": "health-vertical-safety-evidence-action-v1",
+      "case_count": 6,
+      "metrics": {
+        "safety_flag_recall": 1.0,
+        "safety_flag_precision": 1.0,
+        "evidence_coverage": 1.0,
+        "escalation_match_rate": 1.0,
+        "action_tag_recall": 1.0,
+        "action_tag_precision": 1.0,
+        "fully_satisfied_case_rate": 1.0
+      },
+      "missing_predictions": []
+    },
+    {
+      "arm": "rag",
+      "contract": "health-vertical-safety-evidence-action-v1",
+      "case_count": 6,
+      "metrics": {
+        "safety_flag_recall": 1.0,
+        "safety_flag_precision": 1.0,
+        "evidence_coverage": 1.0,
+        "escalation_match_rate": 1.0,
+        "action_tag_recall": 1.0,
+        "action_tag_precision": 1.0,
+        "fully_satisfied_case_rate": 1.0
+      },
+      "missing_predictions": []
+    },
+    {
+      "arm": "rag_safety",
+      "contract": "health-vertical-safety-evidence-action-v1",
+      "case_count": 6,
+      "metrics": {
+        "safety_flag_recall": 1.0,
+        "safety_flag_precision": 1.0,
+        "evidence_coverage": 1.0,
+        "escalation_match_rate": 1.0,
+        "action_tag_recall": 1.0,
+        "action_tag_precision": 1.0,
+        "fully_satisfied_case_rate": 1.0
+      },
+      "missing_predictions": []
+    }
+  ],
+  "same_case_count": true,
+  "limitations": [
+    "Arms are reported separately; no pooled score or clinical ranking is produced.",
+    "Contract metrics do not establish medical accuracy or clinical effectiveness.",
+    "Official comparison requires a frozen blind set and identical evaluation configuration."
+  ]
+}

@@ -1,132 +1,326 @@
 <template>
-  <div class="space-y-5 pb-4 text-slate-950">
-    <ClinicalPageHeader title="我的" />
+  <div class="apple-profile pb-6">
+    <!-- Page Title -->
+    <div class="mx-auto max-w-[420px] px-4">
+      <h1
+        class="pt-4 text-[28px] font-semibold tracking-[-0.02em]"
+        style="color: var(--foreground); line-height: 1.1;"
+      >我的</h1>
+    </div>
 
-    <ClinicalSurfaceCard title="账户概览">
-      <div class="flex items-center gap-3">
-        <button class="relative h-16 w-16 overflow-hidden rounded-full border border-[color:var(--surface-border)]" type="button" @click="triggerAvatar">
-          <img :src="avatarUrl" alt="用户头像" class="h-full w-full object-cover" />
-        </button>
-        <input ref="avatarInput" class="hidden" type="file" accept="image/*" @change="onAvatarChange" />
-
-        <div class="min-w-0 flex-1">
-          <p class="truncate text-base font-semibold text-slate-950">{{ userName }}</p>
-          <p class="truncate text-sm text-slate-600">{{ userEmail }}</p>
-        </div>
-
-        <Badge variant="success">已验证</Badge>
-      </div>
-
-      <div class="mt-4 grid grid-cols-3 gap-3">
-        <div class="rounded-[1.2rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] p-3">
-          <p class="text-xs text-slate-500">设备</p>
-          <p class="mt-2 text-sm font-semibold text-slate-950">{{ stats.devices }}</p>
-        </div>
-        <div class="rounded-[1.2rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] p-3">
-          <p class="text-xs text-slate-500">上传资料</p>
-          <p class="mt-2 text-sm font-semibold text-slate-950">{{ stats.uploads }}</p>
-        </div>
-        <div class="rounded-[1.2rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] p-3">
-          <p class="text-xs text-slate-500">风险评分</p>
-          <p class="mt-2 text-sm font-semibold text-slate-950">{{ displayRiskScore }}</p>
-        </div>
-      </div>
-
-      <div class="mt-4 flex flex-wrap gap-2">
-        <Button @click="openSettings">个人设置</Button>
-        <Button variant="secondary" @click="exportData">导出数据</Button>
-      </div>
-    </ClinicalSurfaceCard>
-
-    <ClinicalSurfaceCard title="健康数据同步">
-      <p class="text-sm text-slate-600">从已连接设备同步最新健康数据。</p>
-
-      <div class="mt-3">
-        <Button :loading="syncing" @click="handleSync">
-          <template v-if="!syncing" #leading>
-            <iconify-icon icon="solar:refresh-circle-bold-duotone" width="18" height="18" />
-          </template>
-          同步健康数据
-        </Button>
-      </div>
-
-      <div v-if="syncResult" class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <ClinicalStatCard label="心率" :value="`${syncResult.hr} bpm`" icon="solar:heart-pulse-bold-duotone" tone="danger" />
-        <ClinicalStatCard label="睡眠评分" :value="String(syncResult.sleepScore)" icon="solar:moon-sleep-bold-duotone" tone="info" />
-        <ClinicalStatCard label="压力评分" :value="String(syncResult.stressScore)" icon="solar:danger-bold-duotone" tone="warning" />
-        <ClinicalStatCard label="HRV" :value="`${syncResult.hrv} ms`" icon="solar:pulse-2-bold-duotone" tone="success" />
-        <ClinicalStatCard label="步数" :value="String(syncResult.steps)" icon="solar:walking-round-bold-duotone" />
-        <ClinicalStatCard label="VO2 Max" :value="`${syncResult.vo2Max} ml/kg`" icon="solar:lungs-bold-duotone" tone="info" />
-        <ClinicalStatCard label="深度睡眠" :value="`${syncResult.deepSleepHours} h`" icon="solar:moon-stars-bold-duotone" tone="default" />
-      </div>
-    </ClinicalSurfaceCard>
-
-    <ClinicalSurfaceCard title="健康设备">
-      <p class="text-sm text-slate-600">连接健康设备数据源，获取更全面的健康数据。</p>
-
-      <div class="mt-3 flex flex-wrap gap-2">
-        <Button :loading="sourcesLoading" @click="handleLoadSources">
-          <template v-if="!sourcesLoading" #leading>
-            <iconify-icon icon="solar:devices-bold-duotone" width="18" height="18" />
-          </template>
-          刷新设备状态
-        </Button>
-      </div>
-
-      <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div class="mx-auto mt-5 max-w-[420px] space-y-5 px-4">
+      <!-- Profile Header Card：点击进入个人信息修改 -->
+      <button
+        type="button"
+        class="flex w-full items-center gap-3.5 rounded-[19.2px] border p-[18px] text-left transition active:scale-[0.99]"
+        style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
+        @click="openSettings"
+      >
+        <!-- Avatar -->
         <div
-          v-for="ds in dataSources"
-          :key="ds.id"
-          class="flex items-center gap-3 rounded-[1.4rem] border px-4 py-3.5 shadow-[var(--elevation-soft)]"
-          :class="ds.authorized
-            ? 'border-emerald-300 bg-emerald-50/60'
-            : 'border-[color:var(--surface-border)] bg-[color:var(--surface-primary)]'"
+          class="relative flex h-[60px] w-[60px] shrink-0 items-center justify-center overflow-hidden rounded-full"
+          style="background: var(--brand-50);"
         >
-          <iconify-icon :icon="ds.icon" width="28" height="28" class="shrink-0 text-slate-700" />
-
-          <div class="min-w-0 flex-1">
-            <p class="text-sm font-semibold text-slate-950">{{ ds.label }}</p>
-            <p class="text-xs" :class="ds.authorized ? 'text-emerald-600' : 'text-slate-500'">
-              {{ ds.authorized ? '已连接' : '未连接' }}
-            </p>
-          </div>
-
-          <Button
-            :variant="ds.authorized ? 'secondary' : 'primary'"
-            :loading="authorizingSource === ds.id"
-            @click="handleAuthorize(ds.id)"
-          >
-            {{ ds.authorized ? '重新授权' : '连接' }}
-          </Button>
+          <img v-if="hasCustomAvatar" :src="avatarUrl" alt="用户头像" class="h-full w-full object-cover" />
+          <span
+            v-else
+            class="text-[24px] font-semibold leading-none"
+            style="color: var(--brand-500);"
+          >{{ userInitial }}</span>
         </div>
-      </div>
-    </ClinicalSurfaceCard>
 
-    <ClinicalSurfaceCard title="数据与隐私">
-      <div class="space-y-2.5">
-        <ActionRow title="数据安全" icon="Database" @click="openSecurity" />
-        <ActionRow title="权限与授权" icon="Shield" @click="openPermissions" />
-        <ActionRow title="隐私中心" icon="FileText" @click="openPrivacy" />
-      </div>
-    </ClinicalSurfaceCard>
+        <!-- Content -->
+        <div class="min-w-0 flex-1">
+          <p class="truncate text-[20px] font-semibold leading-tight" style="color: var(--foreground);">{{ userName }}</p>
+          <p class="mt-0.5 truncate text-[14px]" style="color: var(--muted-foreground);">{{ profileMeta }}</p>
+          <!-- Stats row -->
+          <div class="mt-2.5 flex gap-4">
+            <div class="flex flex-col">
+              <span class="text-[15px] font-semibold leading-none tabular-nums" style="color: var(--foreground);">
+                <template v-if="stats.devices">{{ stats.devices }}</template>
+                <span v-else class="inline-block h-4 w-8 animate-pulse rounded" style="background: var(--background-200);"></span>
+              </span>
+              <span class="mt-1 text-[11px]" style="color: var(--muted-foreground);">设备</span>
+            </div>
+            <div class="flex flex-col">
+              <span class="text-[15px] font-semibold leading-none tabular-nums" style="color: var(--foreground);">
+                <template v-if="stats.uploads">{{ stats.uploads }}</template>
+                <span v-else class="inline-block h-4 w-8 animate-pulse rounded" style="background: var(--background-200);"></span>
+              </span>
+              <span class="mt-1 text-[11px]" style="color: var(--muted-foreground);">上传</span>
+            </div>
+            <div class="flex flex-col">
+              <span class="text-[15px] font-semibold leading-none tabular-nums" style="color: var(--foreground);">
+                <template v-if="displayRiskScore">{{ displayRiskScore }}</template>
+                <span v-else class="inline-block h-4 w-8 animate-pulse rounded" style="background: var(--background-200);"></span>
+              </span>
+              <span class="mt-1 text-[11px]" style="color: var(--muted-foreground);">风险</span>
+            </div>
+          </div>
+        </div>
 
-    <ClinicalSurfaceCard title="帮助与支持">
-      <div class="space-y-2.5">
-        <ActionRow title="使用指南" icon="HelpCircle" @click="openHelpGuide" />
-        <ActionRow title="常见问题" icon="HelpCircle" @click="openHelpFaq" />
-      </div>
-    </ClinicalSurfaceCard>
+        <!-- Chevron -->
+        <iconify-icon icon="solar:alt-arrow-right-outline" width="20" height="20" style="color: var(--muted-foreground);" />
+      </button>
 
-    <ClinicalSurfaceCard title="账户操作">
-      <div class="space-y-2.5">
-        <Button variant="secondary" class="w-full" :loading="clearing" @click="clearCache">清理缓存</Button>
-        <Button variant="danger" class="w-full" :loading="deleting" @click="dangerZone">
-          {{ confirmDelete ? '确认删除账户' : '删除账户' }}
-        </Button>
-        <Button variant="ghost" class="w-full" :loading="loggingOut" @click="handleLogout">退出登录</Button>
-        <p v-if="confirmDelete" class="text-sm text-slate-700">再次点击将提交删除申请。</p>
-      </div>
-    </ClinicalSurfaceCard>
+      <!-- Section 1: 个人资料 -->
+      <section>
+        <h2 class="mb-2 ml-1 text-[13px] font-normal uppercase tracking-[0.02em]" style="color: var(--muted-foreground);">个人资料</h2>
+        <div
+          class="overflow-hidden rounded-[19.2px] border"
+          style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
+        >
+          <!-- 修改头像 -->
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 px-4 py-3 text-left transition active:bg-[color:var(--background-100)]"
+            @click="triggerAvatar"
+          >
+            <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full" style="background: var(--brand-50);">
+              <iconify-icon icon="solar:camera-outline" width="16" height="16" style="color: var(--brand-500);" />
+            </div>
+            <span class="flex-1 text-[16px] leading-tight" style="color: var(--foreground);">修改头像</span>
+            <span class="text-[14px]" style="color: var(--muted-foreground);">{{ hasCustomAvatar ? '已上传' : '未上传' }}</span>
+            <iconify-icon icon="solar:alt-arrow-right-outline" width="18" height="18" style="color: var(--muted-foreground);" />
+          </button>
+          <div class="ml-14 h-px" style="background: var(--border);"></div>
+          <!-- 昵称 -->
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 px-4 py-3 text-left transition active:bg-[color:var(--background-100)]"
+            @click="openSettings"
+          >
+            <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full" style="background: color-mix(in srgb, var(--chart-3) 12%, var(--card));">
+              <iconify-icon icon="solar:user-outline" width="16" height="16" style="color: var(--chart-3);" />
+            </div>
+            <span class="flex-1 text-[16px] leading-tight" style="color: var(--foreground);">昵称</span>
+            <span class="truncate text-[14px]" style="color: var(--muted-foreground); max-width: 160px;">{{ userName }}</span>
+            <iconify-icon icon="solar:alt-arrow-right-outline" width="18" height="18" style="color: var(--muted-foreground);" />
+          </button>
+          <div class="ml-14 h-px" style="background: var(--border);"></div>
+          <!-- 邮箱 -->
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 px-4 py-3 text-left transition active:bg-[color:var(--background-100)]"
+            @click="openSettings"
+          >
+            <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full" style="background: var(--state-success-surface);">
+              <iconify-icon icon="solar:letter-outline" width="16" height="16" style="color: var(--state-success);" />
+            </div>
+            <span class="flex-1 text-[16px] leading-tight" style="color: var(--foreground);">邮箱</span>
+            <span class="truncate text-[14px]" style="color: var(--muted-foreground); max-width: 160px;">{{ userEmail || '未设置' }}</span>
+            <iconify-icon icon="solar:alt-arrow-right-outline" width="18" height="18" style="color: var(--muted-foreground);" />
+          </button>
+        </div>
+        <input ref="avatarInput" class="hidden" type="file" accept="image/*" @change="onAvatarChange" />
+      </section>
+
+      <!-- Section 2: 健康数据 -->
+      <section>
+        <h2 class="mb-2 ml-1 text-[13px] font-normal uppercase tracking-[0.02em]" style="color: var(--muted-foreground);">健康数据</h2>
+        <div
+          class="overflow-hidden rounded-[19.2px] border"
+          style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
+        >
+          <!-- 健康数据源 -->
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 px-4 py-3 text-left transition active:bg-[color:var(--background-100)]"
+            @click="openDataSources"
+          >
+            <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full" style="background: var(--state-error-surface);">
+              <iconify-icon icon="solar:heart-pulse-outline" width="16" height="16" style="color: var(--state-error);" />
+            </div>
+            <span class="flex-1 text-[16px] leading-tight" style="color: var(--foreground);">健康数据源</span>
+            <span class="text-[14px]" style="color: var(--muted-foreground);">{{ connectedSourcesLabel }}</span>
+            <iconify-icon icon="solar:alt-arrow-right-outline" width="18" height="18" style="color: var(--muted-foreground);" />
+          </button>
+          <div class="ml-14 h-px" style="background: var(--border);"></div>
+          <!-- 设备聚合平台 -->
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 px-4 py-3 text-left transition active:bg-[color:var(--background-100)]"
+            @click="router.push('/devices')"
+          >
+            <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full" style="background: var(--brand-50);">
+              <iconify-icon icon="solar:devices-outline" width="16" height="16" style="color: var(--brand-500);" />
+            </div>
+            <span class="flex-1 text-[16px] leading-tight" style="color: var(--foreground);">设备聚合平台</span>
+            <iconify-icon icon="solar:alt-arrow-right-outline" width="18" height="18" style="color: var(--muted-foreground);" />
+          </button>
+          <div class="ml-14 h-px" style="background: var(--border);"></div>
+          <!-- 健康报告 -->
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 px-4 py-3 text-left transition active:bg-[color:var(--background-100)]"
+            @click="exportData"
+          >
+            <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full" style="background: var(--brand-50);">
+              <iconify-icon icon="solar:document-text-outline" width="16" height="16" style="color: var(--brand-500);" />
+            </div>
+            <span class="flex-1 text-[16px] leading-tight" style="color: var(--foreground);">健康报告</span>
+            <iconify-icon icon="solar:alt-arrow-right-outline" width="18" height="18" style="color: var(--muted-foreground);" />
+          </button>
+          <div class="ml-14 h-px" style="background: var(--border);"></div>
+          <!-- 同步健康数据 -->
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 px-4 py-3 text-left transition active:bg-[color:var(--background-100)]"
+            :disabled="syncing"
+            @click="handleSync"
+          >
+            <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full" style="background: var(--state-success-surface);">
+              <iconify-icon icon="solar:refresh-circle-outline" width="16" height="16" style="color: var(--state-success);" />
+            </div>
+            <span class="flex-1 text-[16px] leading-tight" style="color: var(--foreground);">同步健康数据</span>
+            <span v-if="syncing" class="text-[14px]" style="color: var(--muted-foreground);">同步中…</span>
+            <iconify-icon v-else icon="solar:alt-arrow-right-outline" width="18" height="18" style="color: var(--muted-foreground);" />
+          </button>
+        </div>
+
+        <!-- Sync Result Stats -->
+        <div
+          v-if="syncResult"
+          class="mt-3 rounded-[19.2px] border p-4"
+          style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
+        >
+          <p class="mb-3 text-[13px] font-medium" style="color: var(--muted-foreground);">最近同步数据</p>
+          <div class="grid grid-cols-3 gap-3">
+            <div v-for="item in syncStats" :key="item.label" class="rounded-[10px] p-2.5" style="background: var(--secondary);">
+              <p class="text-[11px]" style="color: var(--muted-foreground);">{{ item.label }}</p>
+              <p class="mt-1 text-[15px] font-semibold tabular-nums" style="color: var(--foreground);">{{ item.value }}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 3: 账户 -->
+      <section>
+        <h2 class="mb-2 ml-1 text-[13px] font-normal uppercase tracking-[0.02em]" style="color: var(--muted-foreground);">账户</h2>
+        <div
+          class="overflow-hidden rounded-[19.2px] border"
+          style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
+        >
+          <!-- 通知设置 -->
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 px-4 py-3 text-left transition active:bg-[color:var(--background-100)]"
+            @click="openSettings"
+          >
+            <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full" style="background: color-mix(in srgb, var(--chart-3) 12%, var(--card));">
+              <iconify-icon icon="solar:bell-bing-outline" width="16" height="16" style="color: var(--chart-3);" />
+            </div>
+            <span class="flex-1 text-[16px] leading-tight" style="color: var(--foreground);">通知设置</span>
+            <iconify-icon icon="solar:alt-arrow-right-outline" width="18" height="18" style="color: var(--muted-foreground);" />
+          </button>
+          <div class="ml-14 h-px" style="background: var(--border);"></div>
+          <!-- 隐私中心：合并原隐私与安全 + 隐私中心 -->
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 px-4 py-3 text-left transition active:bg-[color:var(--background-100)]"
+            @click="openPrivacy"
+          >
+            <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full" style="background: var(--state-success-surface);">
+              <iconify-icon icon="solar:shield-check-outline" width="16" height="16" style="color: var(--state-success);" />
+            </div>
+            <span class="flex-1 text-[16px] leading-tight" style="color: var(--foreground);">隐私中心</span>
+            <iconify-icon icon="solar:alt-arrow-right-outline" width="18" height="18" style="color: var(--muted-foreground);" />
+          </button>
+          <div class="ml-14 h-px" style="background: var(--border);"></div>
+          <!-- 权限与授权 -->
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 px-4 py-3 text-left transition active:bg-[color:var(--background-100)]"
+            @click="openPermissions"
+          >
+            <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full" style="background: var(--brand-50);">
+              <iconify-icon icon="solar:keyhole-square-outline" width="16" height="16" style="color: var(--brand-500);" />
+            </div>
+            <span class="flex-1 text-[16px] leading-tight" style="color: var(--foreground);">权限与授权</span>
+            <iconify-icon icon="solar:alt-arrow-right-outline" width="18" height="18" style="color: var(--muted-foreground);" />
+          </button>
+          <div class="ml-14 h-px" style="background: var(--border);"></div>
+          <!-- 帮助与反馈 -->
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 px-4 py-3 text-left transition active:bg-[color:var(--background-100)]"
+            @click="openHelpFaq"
+          >
+            <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full" style="background: var(--background-200);">
+              <iconify-icon icon="solar:question-circle-outline" width="16" height="16" style="color: var(--muted-foreground);" />
+            </div>
+            <span class="flex-1 text-[16px] leading-tight" style="color: var(--foreground);">帮助与反馈</span>
+            <iconify-icon icon="solar:alt-arrow-right-outline" width="18" height="18" style="color: var(--muted-foreground);" />
+          </button>
+        </div>
+      </section>
+
+      <!-- Section 4: 其他 -->
+      <section>
+        <h2 class="mb-2 ml-1 text-[13px] font-normal uppercase tracking-[0.02em]" style="color: var(--muted-foreground);">其他</h2>
+        <div
+          class="overflow-hidden rounded-[19.2px] border"
+          style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
+        >
+          <!-- 关于 -->
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 px-4 py-3 text-left transition active:bg-[color:var(--background-100)]"
+            @click="openAbout"
+          >
+            <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full" style="background: var(--background-200);">
+              <iconify-icon icon="solar:info-circle-outline" width="16" height="16" style="color: var(--muted-foreground);" />
+            </div>
+            <span class="flex-1 text-[16px] leading-tight" style="color: var(--foreground);">关于</span>
+            <span class="text-[14px]" style="color: var(--muted-foreground);">v1.0.0</span>
+            <iconify-icon icon="solar:alt-arrow-right-outline" width="18" height="18" style="color: var(--muted-foreground);" />
+          </button>
+          <div class="ml-14 h-px" style="background: var(--border);"></div>
+          <!-- 清理缓存 -->
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 px-4 py-3 text-left transition active:bg-[color:var(--background-100)]"
+            :disabled="clearing"
+            @click="clearCache"
+          >
+            <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full" style="background: var(--background-200);">
+              <iconify-icon icon="solar:broom-outline" width="16" height="16" style="color: var(--muted-foreground);" />
+            </div>
+            <span class="flex-1 text-[16px] leading-tight" style="color: var(--foreground);">清理缓存</span>
+            <span v-if="clearing" class="text-[14px]" style="color: var(--muted-foreground);">清理中…</span>
+            <iconify-icon v-else icon="solar:alt-arrow-right-outline" width="18" height="18" style="color: var(--muted-foreground);" />
+          </button>
+          <div class="ml-14 h-px" style="background: var(--border);"></div>
+          <!-- 删除账户 -->
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 px-4 py-3 text-left transition active:bg-[color:var(--state-error-surface)]"
+            :disabled="deleting"
+            @click="dangerZone"
+          >
+            <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full" style="background: var(--state-error-surface);">
+              <iconify-icon icon="solar:trash-bin-minimalistic-outline" width="16" height="16" style="color: var(--state-error);" />
+            </div>
+            <span class="flex-1 text-[16px] leading-tight" style="color: var(--state-error);">
+              {{ confirmDelete ? '确认删除账户' : '删除账户' }}
+            </span>
+            <span v-if="deleting" class="text-[14px]" style="color: var(--muted-foreground);">处理中…</span>
+            <span v-else-if="confirmDelete" class="text-[12px]" style="color: var(--state-error);">再次点击确认</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Logout Button -->
+      <button
+        type="button"
+        class="flex w-full items-center justify-center rounded-[19.2px] py-3.5 text-[16px] font-medium transition active:scale-[0.99]"
+        :disabled="loggingOut"
+        style="background: var(--state-error-surface); color: var(--state-error); letter-spacing: 0.01em;"
+        @click="handleLogout"
+      >
+        {{ loggingOut ? '退出中…' : '退出登录' }}
+      </button>
+    </div>
   </div>
 </template>
 
@@ -137,32 +331,56 @@ import { syncRookData, authorizeDataSource, getAuthorizedSources, type RookSyncR
 import { getProfileSummary, updateProfileAvatar } from '@/api/modules/profile'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
-import ActionRow from '@/shared/components/ActionRow.vue'
-import ClinicalPageHeader from '@/shared/components/clinical/ClinicalPageHeader.vue'
-import ClinicalSurfaceCard from '@/shared/components/clinical/ClinicalSurfaceCard.vue'
-import ClinicalStatCard from '@/shared/components/clinical/ClinicalStatCard.vue'
-import Badge from '@/shared/components/ui/Badge.vue'
-import Button from '@/shared/components/ui/Button.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const { success, warning, info, error } = useToast()
 
 const stats = ref({
-  devices: '加载中',
-  uploads: '加载中',
-  riskScore: '加载中',
+  devices: '',
+  uploads: '',
+  riskScore: '',
 })
 
 const userName = computed(() => authStore.userName)
 const userEmail = computed(() => authStore.user?.email ?? '')
 const avatarUrl = computed(() => authStore.avatarUrl)
+const hasCustomAvatar = computed(() => {
+  const url = authStore.user?.avatarUrl
+  return Boolean(url) && !url!.startsWith('data:image/svg+xml')
+})
+const userInitial = computed(() => {
+  const name = authStore.user?.name ?? ''
+  return name.charAt(0) || '我'
+})
+const profileMeta = computed(() => {
+  const email = userEmail.value
+  return email || '查看并编辑个人资料'
+})
 const displayRiskScore = computed(() =>
   stats.value.riskScore
     .replace(/\blow\b/gi, '低风险')
     .replace(/\bmedium\b/gi, '中风险')
     .replace(/\bhigh\b/gi, '高风险'),
 )
+const connectedSourcesLabel = computed(() => {
+  const count = dataSources.value.filter((d) => d.authorized).length
+  return count > 0 ? `${count} 个` : '未连接'
+})
+
+const syncStats = computed(() => {
+  if (!syncResult.value) return []
+  const r = syncResult.value
+  return [
+    { label: '心率', value: `${r.hr} bpm` },
+    { label: '睡眠评分', value: String(r.sleepScore) },
+    { label: '压力评分', value: String(r.stressScore) },
+    { label: 'HRV', value: `${r.hrv} ms` },
+    { label: '步数', value: String(r.steps) },
+    { label: 'VO2 Max', value: `${r.vo2Max}` },
+    { label: '深度睡眠', value: `${r.deepSleepHours} h` },
+  ]
+})
 
 const avatarInput = ref<HTMLInputElement | null>(null)
 
@@ -208,7 +426,7 @@ const handleLoadSources = async () => {
     if (connectedCount > 0) {
       success('设备状态已更新', `已连接 ${connectedCount} 个数据源。`)
     } else {
-      info('暂无设备', '您尚未连接任何健康设备。')
+      info('暂无数据源', '您尚未授权任何第三方数据源。')
     }
   } catch (err) {
     error('加载失败', err instanceof Error ? err.message : '请稍后重试')
@@ -285,11 +503,11 @@ const onAvatarChange = (event: Event) => {
 
 const openSettings = () => router.push('/profile/settings')
 const exportData = () => router.push('/profile/export')
-const openSecurity = () => router.push('/profile/security')
 const openPermissions = () => router.push('/profile/permissions')
 const openPrivacy = () => router.push('/profile/privacy')
-const openHelpGuide = () => router.push({ path: '/profile/help', query: { topic: '使用指南' } })
+const openDataSources = () => router.push('/profile/data-sources')
 const openHelpFaq = () => router.push({ path: '/profile/help', query: { topic: '常见问题' } })
+const openAbout = () => info('关于应用', '健康监测与分析平台 v1.0.0')
 
 const clearCache = async () => {
   clearing.value = true

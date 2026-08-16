@@ -96,14 +96,15 @@ public class HealthKnowledgeService {
 
     // Add user's active concerns from latest monitor data
     var latest = jdbc.queryForList(
-        "SELECT hr, sleep_score, stress_score FROM monitor_records ORDER BY recorded_at DESC LIMIT 1");
+        "SELECT hr, sleep_score, stress_score FROM monitor_records "
+            + "WHERE user_id=? ORDER BY recorded_at DESC LIMIT 1", uid);
     if (!latest.isEmpty()) {
       var r = latest.get(0);
       int hr = r.get("hr") instanceof Number n ? n.intValue() : 0;
       int sleep = r.get("sleep_score") instanceof Number n ? n.intValue() : 0;
       int stress = r.get("stress_score") instanceof Number n ? n.intValue() : 0;
       if (hr > 90) knowledge.add("当前心率偏高：" + hr + " bpm");
-      if (sleep < 70) knowledge.add("当前睡眠评分偏低：" + sleep + " 分");
+      if (sleep > 0 && sleep < 70) knowledge.add("当前睡眠评分偏低：" + sleep + " 分");
       if (stress > 65) knowledge.add("当前压力指数偏高：" + stress);
     }
 

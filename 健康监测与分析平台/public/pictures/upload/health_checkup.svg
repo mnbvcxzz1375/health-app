@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+  <defs>
+    <linearGradient id="bg_checkup" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#e0f2fe"/>
+      <stop offset="100%" stop-color="#bae6fd"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="400" fill="url(#bg_checkup)" rx="12"/>
+  <rect x="20" y="20" width="560" height="360" fill="#ffffff" stroke="#0284c7" stroke-width="3" rx="8"/>
+  <text x="300" y="60" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="28" font-weight="bold" fill="#0c4a6e">健康体检摘要</text>
+  <text x="300" y="88" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#075985">市健康管理中心 · 2026-06-20</text>
+  <line x1="60" y1="105" x2="540" y2="105" stroke="#0284c7" stroke-width="2"/>
+  <text x="60" y="135" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#475569">姓名：李某  性别：女  年龄：38 岁  体检日期：2026-06-18</text>
+  <line x1="60" y1="150" x2="540" y2="150" stroke="#7dd3fc" stroke-width="1"/>
+  <text x="60" y="175" font-family="Microsoft YaHei, sans-serif" font-size="15" font-weight="bold" fill="#0c4a6e">一般检查</text>
+  <text x="60" y="198" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#475569">血压 135/88 mmHg（偏高）  BMI 24.2  心率 78 bpm</text>
+  <text x="60" y="225" font-family="Microsoft YaHei, sans-serif" font-size="15" font-weight="bold" fill="#0c4a6e">血生化</text>
+  <text x="60" y="248" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#475569">空腹血糖 6.8 mmol/L（偏高）  总胆固醇 5.8（偏高）</text>
+  <text x="60" y="271" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#475569">甘油三酯 2.1（偏高）  低密度脂蛋白 3.9（偏高）</text>
+  <text x="60" y="294" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#475569">谷丙转氨酶 32  肌酐 68  尿酸 380</text>
+  <line x1="60" y1="310" x2="540" y2="310" stroke="#7dd3fc" stroke-width="1"/>
+  <text x="60" y="335" font-family="Microsoft YaHei, sans-serif" font-size="15" font-weight="bold" fill="#0c4a6e">总检结论：</text>
+  <text x="60" y="358" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#dc2626">血压偏高、空腹血糖受损、血脂代谢异常</text>
+  <text x="60" y="378" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#dc2626">建议低盐低脂饮食、规律运动、3 个月复查</text>
+  <text x="440" y="375" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#64748b">主检医师：陈医生</text>
+</svg>

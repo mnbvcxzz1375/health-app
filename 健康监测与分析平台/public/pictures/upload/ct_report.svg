@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+  <defs>
+    <linearGradient id="bg_ct" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#e0f2fe"/>
+      <stop offset="100%" stop-color="#bae6fd"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="400" fill="url(#bg_ct)" rx="12"/>
+  <rect x="20" y="20" width="560" height="360" fill="#ffffff" stroke="#0284c7" stroke-width="3" rx="8"/>
+  <text x="300" y="60" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="28" font-weight="bold" fill="#0c4a6e">胸部 CT 诊断报告</text>
+  <text x="300" y="88" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#075985">市中心医院放射科 · 2026-07-10</text>
+  <line x1="60" y1="105" x2="540" y2="105" stroke="#0284c7" stroke-width="2"/>
+  <text x="60" y="135" font-family="Microsoft YaHei, sans-serif" font-size="16" font-weight="bold" fill="#0c4a6e">检查方式：胸部平扫 CT</text>
+  <text x="60" y="160" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#475569">患者：张某 男 45 岁  临床诊断：咳嗽待查</text>
+  <line x1="60" y1="175" x2="540" y2="175" stroke="#7dd3fc" stroke-width="1"/>
+  <text x="60" y="200" font-family="Microsoft YaHei, sans-serif" font-size="16" font-weight="bold" fill="#0c4a6e">影像所见：</text>
+  <text x="60" y="225" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#475569">胸廓对称，双肺纹理增粗、紊乱，以双下肺为著</text>
+  <text x="60" y="248" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#475569">右肺中叶可见斑片状模糊影，密度不均，边缘不清</text>
+  <text x="60" y="271" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#475569">双肺门无增大，气管及主支气管通畅</text>
+  <text x="60" y="294" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#475569">纵隔居中，未见肿大淋巴结，心影大血管形态正常</text>
+  <line x1="60" y1="310" x2="540" y2="310" stroke="#7dd3fc" stroke-width="1"/>
+  <text x="60" y="335" font-family="Microsoft YaHei, sans-serif" font-size="16" font-weight="bold" fill="#0c4a6e">诊断意见：</text>
+  <text x="60" y="360" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#dc2626">1. 双肺纹理增粗，考虑支气管炎可能</text>
+  <text x="60" y="380" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#dc2626">2. 右肺中叶斑片影，建议抗炎治疗后复查</text>
+  <text x="440" y="375" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#64748b">审核医师：李医生</text>
+</svg>

@@ -1,95 +1,120 @@
 <template>
-  <div class="space-y-5 pb-4 text-slate-950">
-    <ClinicalPageHeader
-      eyebrow="Support Center"
-      title="帮助与支持"
-      description="按主题快速检索常见问题，必要时直接提交问题单给支持团队。"
-      :meta="`${filteredFaqs.length} 条结果`"
-      meta-label="当前命中"
-    >
-      <Button variant="secondary" @click="goBack">
-        <iconify-icon icon="solar:alt-arrow-left-outline" width="16" height="16" />
-        返回
-      </Button>
-    </ClinicalPageHeader>
-
-    <ClinicalSurfaceCard
-      eyebrow="Knowledge Search"
-      title="问题检索"
-      description="可以搜索导出、隐私、设备、提醒等主题，也可以直接使用快捷标签。"
-    >
-      <div class="flex flex-col gap-3 lg:flex-row">
-        <input
-          v-model="keyword"
-          class="w-full rounded-[1rem] border border-[color:var(--surface-border)] px-4 py-3 text-sm outline-none focus:border-[color:var(--ring)]"
-          placeholder="搜索问题，例如：导出、隐私、设备连接"
-        />
-        <Button variant="secondary" @click="resetSearch">清空</Button>
-      </div>
-
-      <div class="mt-4 flex flex-wrap gap-2">
-        <button
-          v-for="tag in quickTags"
-          :key="tag"
-          type="button"
-          class="rounded-full border px-3 py-1.5 text-xs transition"
-          :class="keyword === tag ? 'border-teal-300 bg-teal-50 text-teal-900' : 'border-[color:var(--surface-border)] bg-white text-slate-600 hover:text-slate-900'"
-          @click="keyword = tag"
-        >
-          {{ tag }}
-        </button>
-      </div>
-    </ClinicalSurfaceCard>
-
-    <div v-if="filteredFaqs.length" class="grid gap-3">
-      <ClinicalSurfaceCard
-        v-for="item in filteredFaqs"
-        :key="item.q"
-        eyebrow="FAQ"
-        :title="item.q"
-        :description="item.a"
+  <ProfileSubPage title="帮助与支持" subtitle="按主题检索常见问题，或直接提交问题单">
+    <div class="space-y-5">
+      <!-- 搜索 -->
+      <section
+        class="rounded-[19.2px] border p-[18px]"
+        style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
       >
-        <div class="flex flex-wrap gap-2">
-          <span v-for="tag in item.tags" :key="tag" class="rounded-full border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-2.5 py-1 text-[11px] text-slate-600">
+        <h2 class="text-[17px] font-semibold" style="color: var(--foreground);">问题检索</h2>
+        <div class="mt-3 flex gap-2">
+          <div class="relative flex-1">
+            <iconify-icon
+              icon="solar:magnifer-outline"
+              width="18"
+              height="18"
+              class="absolute left-3.5 top-1/2 -translate-y-1/2"
+              style="color: var(--muted-foreground);"
+            />
+            <input
+              v-model="keyword"
+              type="text"
+              class="h-12 w-full rounded-[12px] border pl-10 pr-4 text-[15px] outline-none transition focus:ring-2 focus:ring-[color:var(--ring)]"
+              style="background: var(--secondary); border-color: var(--border); color: var(--foreground);"
+              placeholder="搜索问题，例如：导出、隐私、设备连接"
+            />
+          </div>
+          <button
+            type="button"
+            class="flex h-12 items-center gap-1.5 rounded-full px-4 text-[14px] font-medium transition active:scale-95"
+            style="background: var(--secondary); color: var(--foreground);"
+            @click="resetSearch"
+          >
+            清空
+          </button>
+        </div>
+
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button
+            v-for="tag in quickTags"
+            :key="tag"
+            type="button"
+            class="rounded-full px-3 py-1.5 text-[13px] font-medium transition active:scale-95"
+            :style="keyword === tag
+              ? { background: 'var(--brand-500)', color: 'var(--primary-foreground)' }
+              : { background: 'var(--secondary)', color: 'var(--foreground)', border: '1px solid var(--border)' }"
+            @click="keyword = tag"
+          >
             {{ tag }}
-          </span>
+          </button>
         </div>
-      </ClinicalSurfaceCard>
-    </div>
+      </section>
 
-    <ClinicalStateNotice
-      v-else
-      tone="empty"
-      title="没有找到相关结果"
-      description="可以尝试更换关键词，或直接联系支持团队。"
-      action-label="联系支持"
-      @action="contactSupport"
-    />
-
-    <ClinicalSurfaceCard
-      eyebrow="Need More Help"
-      title="仍需帮助？"
-      description="复杂问题可以直接提交问题单，我们会带着上下文跟进。"
-    >
-      <div class="flex flex-col gap-3 rounded-[1.25rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p class="text-sm font-semibold text-slate-950">提交问题单</p>
-          <p class="mt-1 text-sm leading-6 text-slate-600">描述问题、相关页面和操作场景，支持团队会在工作日尽快回复。</p>
+      <!-- 结果 -->
+      <section v-if="filteredFaqs.length" class="space-y-2">
+        <div
+          v-for="item in filteredFaqs"
+          :key="item.q"
+          class="rounded-[12px] border p-4"
+          style="background: var(--secondary); border-color: var(--border);"
+        >
+          <p class="text-[15px] font-medium" style="color: var(--foreground);">{{ item.q }}</p>
+          <p class="mt-1 text-[13px] leading-5" style="color: var(--muted-foreground);">{{ item.a }}</p>
+          <div class="mt-2 flex flex-wrap gap-1.5">
+            <span
+              v-for="tag in item.tags"
+              :key="tag"
+              class="rounded-full border px-2 py-0.5 text-[11px]"
+              style="background: var(--card); border-color: var(--border); color: var(--muted-foreground);"
+            >
+              {{ tag }}
+            </span>
+          </div>
         </div>
-        <Button @click="contactSupport">提交问题</Button>
+      </section>
+
+      <!-- 空状态 -->
+      <div
+        v-else
+        class="rounded-[19.2px] border p-6 text-center"
+        style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
+      >
+        <div
+          class="mx-auto flex h-12 w-12 items-center justify-center rounded-full"
+          style="background: var(--background-200); color: var(--muted-foreground);"
+        >
+          <iconify-icon icon="solar:document-text-outline" width="24" height="24" />
+        </div>
+        <p class="mt-3 text-[15px] font-medium" style="color: var(--foreground);">没有找到相关结果</p>
+        <p class="mt-1 text-[13px]" style="color: var(--muted-foreground);">可以尝试更换关键词，或直接联系支持团队。</p>
       </div>
-    </ClinicalSurfaceCard>
-  </div>
+
+      <!-- 提交问题 -->
+      <section
+        class="rounded-[19.2px] border p-[18px]"
+        style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
+      >
+        <h2 class="text-[17px] font-semibold" style="color: var(--foreground);">仍需帮助？</h2>
+        <p class="mt-0.5 text-[13px]" style="color: var(--muted-foreground);">复杂问题可以直接提交问题单，我们会带着上下文跟进。</p>
+        <button
+          type="button"
+          class="mt-3 flex h-[48px] w-full items-center justify-center gap-2 rounded-full text-[15px] font-semibold transition active:scale-[0.98]"
+          style="background: var(--primary); color: var(--primary-foreground);"
+          @click="contactSupport"
+        >
+          <iconify-icon icon="solar:chat-round-dots-outline" width="18" height="18" />
+          提交问题单
+        </button>
+      </section>
+    </div>
+  </ProfileSubPage>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useToast } from '@/composables/useToast'
-import ClinicalPageHeader from '@/shared/components/clinical/ClinicalPageHeader.vue'
-import ClinicalStateNotice from '@/shared/components/clinical/ClinicalStateNotice.vue'
-import ClinicalSurfaceCard from '@/shared/components/clinical/ClinicalSurfaceCard.vue'
-import Button from '@/shared/components/ui/Button.vue'
+import ProfileSubPage from '../components/ProfileSubPage.vue'
 
 type FaqItem = {
   q: string
@@ -98,7 +123,6 @@ type FaqItem = {
 }
 
 const route = useRoute()
-const router = useRouter()
 const { success, info } = useToast()
 
 const keyword = ref(typeof route.query.topic === 'string' ? route.query.topic : '')
@@ -143,7 +167,6 @@ const faqs: FaqItem[] = [
 const filteredFaqs = computed(() => {
   const key = keyword.value.trim().toLowerCase()
   if (!key) return faqs
-
   return faqs.filter((item) => {
     const source = `${item.q} ${item.a} ${item.tags.join(' ')}`.toLowerCase()
     return source.includes(key)
@@ -157,13 +180,5 @@ const resetSearch = () => {
 
 const contactSupport = () => {
   success('问题单已创建', '支持团队会在工作日尽快联系你。')
-}
-
-const goBack = () => {
-  if (window.history.length > 1) {
-    router.back()
-    return
-  }
-  router.push('/profile')
 }
 </script>

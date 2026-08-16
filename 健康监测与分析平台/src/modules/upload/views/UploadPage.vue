@@ -1,259 +1,465 @@
 <template>
-  <div class="space-y-5 pb-4 text-slate-950">
-    <ClinicalFeatureNavBar title="上传分析" back-to="/home" />
-    <ClinicalPageHeader title="上传分析" />
+  <div class="apple-upload pb-6">
+    <div class="mx-auto max-w-[420px] px-4 pt-4">
+      <!-- Page Header -->
+      <header>
+        <h1 class="text-[28px] font-semibold tracking-[-0.02em]" style="color: var(--foreground); line-height: 1.15;">上传分析</h1>
+        <p class="mt-1.5 text-[15px]" style="color: var(--muted-foreground);">上传健康资料，AI 自动生成分析报告</p>
+      </header>
 
-    <ClinicalSurfaceCard title="资料类型">
-      <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <button
-          v-for="item in typeOptions"
-          :key="item.key"
-          type="button"
-          class="rounded-[1.25rem] border px-4 py-4 text-left transition"
-          :class="
-            uploadType === item.key
-              ? 'border-[color:var(--accent-strong)] bg-[color:var(--accent-soft)]'
-              : 'border-[color:var(--surface-border)] bg-[color:var(--surface-primary)] hover:bg-[color:var(--surface-secondary)]'
-          "
-          @click="selectType(item.key)"
-        >
-          <p class="text-sm font-semibold text-slate-950">{{ item.label }}</p>
-          <p class="mt-1 text-xs text-slate-500">{{ item.hint }}</p>
-        </button>
-      </div>
-    </ClinicalSurfaceCard>
+      <!-- Material Type Selection Card -->
+      <section
+        class="mt-5 rounded-[19.2px] border p-5"
+        style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
+      >
+        <span class="text-[13px] font-semibold uppercase tracking-[0.06em]" style="color: var(--muted-foreground);">资料类型</span>
+        <div class="mt-3 grid grid-cols-2 gap-3">
+          <button
+            v-for="item in typeOptions"
+            :key="item.key"
+            type="button"
+            class="rounded-[12.8px] border p-4 text-left transition active:scale-[0.98]"
+            :style="uploadType === item.key
+              ? { borderColor: 'var(--brand-500)', background: 'color-mix(in srgb, var(--brand-500) 8%, var(--card))' }
+              : { borderColor: 'var(--border)', background: 'var(--card)' }"
+            :disabled="isSubmitting"
+            @click="selectType(item.key)"
+          >
+            <div class="flex h-10 w-10 items-center justify-center rounded-[10px]" style="background: var(--brand-50);">
+              <iconify-icon :icon="item.icon" width="24" height="24" style="color: var(--brand-500);" />
+            </div>
+            <div class="mt-3 text-[15px] font-semibold" style="color: var(--foreground);">{{ item.label }}</div>
+            <div class="mt-0.5 text-[12px]" style="color: var(--muted-foreground);">{{ item.hint }}</div>
+          </button>
+        </div>
+      </section>
 
-    <ClinicalSurfaceCard title="上传内容">
-      <div v-if="isFileType" class="space-y-3">
+      <!-- Upload Area (file type: image / lab) -->
+      <section v-if="isFileType" class="mt-4">
         <input
           id="upload-file-input"
           ref="fileInput"
           data-testid="upload-file-input"
           type="file"
-          class="sr-only"
+          class="hidden"
           :accept="fileAccept"
           multiple
           @change="onFileChange"
         />
-
         <label
           for="upload-file-input"
-          class="flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-[1.4rem] border border-dashed border-[color:var(--accent-strong)] bg-[color:var(--accent-soft)] px-4 py-8 text-center transition hover:bg-white"
+          class="block cursor-pointer rounded-[19.2px] p-8 text-center transition active:scale-[0.99]"
+          style="border: 2px dashed var(--brand-300); background: color-mix(in srgb, var(--brand-500) 8%, var(--card));"
         >
-          <iconify-icon icon="solar:upload-outline" width="24" height="24" class="text-[color:var(--accent-strong)]" />
-          <span class="text-sm font-semibold text-slate-950">
+          <iconify-icon icon="solar:cloud-upload-outline" width="32" height="32" class="mx-auto" style="color: var(--brand-500);" />
+          <div class="mt-3 text-[15px] font-semibold" style="color: var(--foreground);">
             {{ selectedFiles.length ? '重新选择文件' : '选择文件' }}
-          </span>
-          <span class="text-xs text-slate-500">{{ fileHint }}</span>
+          </div>
+          <div class="mt-1 text-[13px]" style="color: var(--muted-foreground);">{{ fileHint }}</div>
         </label>
 
+        <!-- File list -->
         <div
           v-if="selectedFiles.length"
-          class="rounded-[1.2rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-4"
+          class="mt-3 rounded-[19.2px] border p-3"
+          style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
         >
-          <div class="flex items-center justify-between gap-3">
-            <p class="text-sm font-semibold text-slate-950">已选择 {{ selectedFiles.length }} 个文件</p>
-            <Button variant="ghost" @click="clearFiles">清空</Button>
+          <div class="flex items-center justify-between gap-3 px-1 pb-2">
+            <p class="text-[13px] font-semibold" style="color: var(--foreground);">已选择 {{ selectedFiles.length }} 个文件</p>
+            <button
+              type="button"
+              class="text-[13px] font-medium transition active:opacity-70"
+              style="color: var(--brand-500);"
+              @click="clearFiles"
+            >清空</button>
           </div>
-
-          <div class="mt-3 space-y-2">
-            <div
-              v-for="file in selectedFiles"
-              :key="`${file.name}_${file.lastModified}`"
-              class="rounded-[1rem] bg-white px-3 py-2 text-sm text-slate-700"
-            >
-              {{ file.name }}
+          <div
+            v-for="file in selectedFiles"
+            :key="`${file.name}_${file.lastModified}`"
+            class="flex items-center gap-3 py-2"
+          >
+            <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]" style="background: var(--brand-50);">
+              <iconify-icon icon="solar:file-outline" width="16" height="16" style="color: var(--brand-500);" />
             </div>
+            <div class="min-w-0 flex-1">
+              <div class="truncate text-[14px] font-medium" style="color: var(--foreground);">{{ file.name }}</div>
+              <div class="text-[12px]" style="color: var(--muted-foreground);">{{ formatFileSize(file.size) }}</div>
+            </div>
+            <iconify-icon icon="solar:check-circle-bold" width="20" height="20" class="shrink-0" style="color: var(--state-success);" />
           </div>
         </div>
-      </div>
 
-      <div v-else-if="isTextType" class="space-y-3">
+        <!-- Sample images -->
+        <div v-if="visibleSampleImages.length" class="mt-4">
+          <span class="text-[13px] font-semibold uppercase tracking-[0.06em]" style="color: var(--muted-foreground);">示例图片</span>
+          <div class="mt-2 grid grid-cols-2 gap-3">
+            <button
+              v-for="img in visibleSampleImages"
+              :key="img.url"
+              type="button"
+              class="overflow-hidden rounded-[12.8px] border text-left transition active:scale-[0.98]"
+              style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
+              :aria-label="`使用示例图片：${img.name}`"
+              @click="useSampleImage(img.url, img.name)"
+            >
+              <img :src="img.url" :alt="img.name" class="h-[90px] w-full object-cover" />
+              <div class="p-2 text-[12px]" style="color: var(--muted-foreground);">{{ img.name }}</div>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Text Input Area (text / symptom) -->
+      <section v-else-if="isTextType" class="mt-4">
         <textarea
           v-model="text"
           rows="7"
-          class="w-full resize-none rounded-[1.2rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-3 text-sm leading-6 outline-none transition focus:border-[color:var(--accent-strong)]"
-          placeholder="请输入需要分析的报告内容或症状描述。"
+          class="w-full resize-none rounded-[19.2px] border p-4 text-[15px] outline-none transition focus:border-[color:var(--ring)] focus:outline-none focus:ring-2 focus:ring-[color:var(--ring)]"
+          style="background: var(--card); border-color: var(--border); color: var(--foreground);"
+          placeholder="请输入需要分析的报告内容或症状描述"
         />
-        <p class="text-xs text-slate-500">建议至少输入 10 个字，便于生成更稳定的分析结果。</p>
-      </div>
+        <div class="mt-1.5 text-[12px]" style="color: var(--muted-foreground);">建议至少输入 10 个字</div>
+      </section>
 
-      <ClinicalStateNotice
+      <!-- Empty state -->
+      <section
         v-else
-        class="mt-1"
-        tone="empty"
-        title="请先选择资料类型"
-        description="先选择资料类型，再上传文件或输入文字内容。"
-      />
+        class="mt-4 rounded-[19.2px] border p-6 text-center"
+        style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
+      >
+        <iconify-icon icon="solar:upload-outline" width="32" height="32" class="mx-auto" style="color: var(--muted-foreground);" />
+        <p class="mt-2 text-[14px]" style="color: var(--muted-foreground);">请先选择资料类型</p>
+      </section>
 
-      <div
+      <!-- CTA: 开始分析 -->
+      <button
+        type="button"
+        class="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full text-[15px] font-semibold transition active:scale-[0.98] disabled:opacity-60"
+        style="background: var(--primary); color: var(--primary-foreground);"
+        :disabled="isSubmitting"
+        @click="handleSubmitClick"
+      >
+        <iconify-icon icon="solar:magic-stick-3-bold-duotone" width="20" height="20" />
+        {{ isSubmitting ? '分析中…' : '开始分析' }}
+      </button>
+
+      <!-- Reset button -->
+      <button
+        v-if="uploadType"
+        type="button"
+        class="mt-2 w-full py-2 text-center text-[13px] transition active:opacity-70"
+        style="color: var(--muted-foreground);"
+        :disabled="isSubmitting"
+        @click="reset"
+      >重置</button>
+
+      <!-- Analysis Progress -->
+      <section
         v-if="status !== 'idle'"
-        class="mt-4 rounded-[1.25rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-4"
+        ref="progressSectionRef"
+        class="mt-4 rounded-[19.2px] border p-5"
+        style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
       >
-        <div class="flex items-center justify-between text-xs text-slate-500">
-          <span>{{ statusText }}</span>
-          <span>{{ progress }}%</span>
+        <div class="mb-3 flex items-center justify-between">
+          <span class="flex items-center gap-2 text-[15px] font-semibold" style="color: var(--foreground);">
+            <iconify-icon
+              :icon="status === 'complete' ? 'solar:check-circle-bold' : 'solar:spinner-round-line-bold-duotone'"
+              width="16"
+              height="16"
+              :style="status === 'complete' ? { color: 'var(--state-success)' } : { color: 'var(--brand-500)' }"
+            />
+            {{ statusText }}
+          </span>
+          <span class="text-[15px] font-semibold tabular-nums" style="color: var(--brand-500);">{{ progress }}%</span>
         </div>
-        <div class="mt-3">
-          <Progress :value="progress" />
+        <div class="w-full overflow-hidden rounded-full" style="height: 6px; background: var(--background-200);">
+          <div
+            style="height: 100%; background: var(--brand-500); border-radius: 9999px; transition: width 0.3s ease;"
+            :style="{ width: `${progress}%` }"
+          ></div>
         </div>
-      </div>
+        <div class="mt-2 text-[13px]" style="color: var(--muted-foreground);">
+          {{ status === 'uploading' ? '正在上传资料…' : status === 'analyzing' ? '正在识别报告关键指标…' : '分析已完成' }}
+        </div>
+      </section>
 
-      <div class="mt-4 flex flex-wrap gap-2">
-        <Button :loading="isSubmitting" @click="handleSubmitClick">
-          <iconify-icon icon="solar:upload-outline" width="16" height="16" />
-          开始分析
-        </Button>
-        <Button variant="secondary" :disabled="isSubmitting" @click="reset">重置</Button>
-      </div>
-    </ClinicalSurfaceCard>
-
-    <div
-      v-if="status === 'complete' && report"
-      ref="reportSectionRef"
-      class="transition-all duration-500"
-      :class="reportRevealActive ? 'translate-y-2 scale-[1.01]' : ''"
-    >
-      <ClinicalSurfaceCard
-        title="分析报告"
-        :class="reportRevealActive ? 'ring-2 ring-[color:var(--accent-strong)] ring-offset-2 ring-offset-[color:var(--page-bg)]' : ''"
+      <!-- Analysis Report -->
+      <section
+        v-if="status === 'complete' && report"
+        ref="reportSectionRef"
+        class="mt-4 rounded-[19.2px] border p-5 transition-all duration-500"
+        :class="reportRevealActive ? 'translate-y-2 scale-[1.01]' : ''"
+        style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
       >
-        <div class="space-y-4">
-          <div class="rounded-[1.25rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-4">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p class="text-lg font-semibold text-slate-950">{{ report.title }}</p>
-                <p class="mt-1 text-sm leading-6 text-slate-600">{{ report.summary }}</p>
-              </div>
-              <Badge :variant="riskBadgeVariant">{{ report.riskLevel }}</Badge>
-            </div>
-            <p class="mt-3 text-sm text-slate-700">康复重点：{{ report.rehabFocus }}</p>
-          </div>
-
-          <div class="grid gap-3 lg:grid-cols-2">
-            <div class="rounded-[1.25rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-4">
-              <p class="text-sm font-semibold text-slate-950">关注点</p>
-              <ul class="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-700">
-                <li v-for="point in report.points" :key="point">{{ point }}</li>
-              </ul>
-            </div>
-
-            <div class="rounded-[1.25rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-4">
-              <p class="text-sm font-semibold text-slate-950">建议</p>
-              <ul class="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-700">
-                <li v-for="advice in report.advice" :key="advice">{{ advice }}</li>
-              </ul>
-            </div>
-          </div>
-
-          <div class="rounded-[1.25rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-4">
-            <p class="text-sm font-semibold text-slate-950">后续观察</p>
-            <ul class="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-700">
-              <li v-for="item in report.followUp" :key="item">{{ item }}</li>
-            </ul>
-            <p class="mt-4 text-xs leading-6 text-slate-500">{{ report.caution }}</p>
-          </div>
-
-          <div class="flex flex-wrap gap-2">
-            <Button v-if="!saved" :loading="savingReport" @click="handleSaveReport">保留并生成康复计划</Button>
-            <Button v-if="!saved" variant="secondary" :disabled="savingReport" @click="handleDiscardReport">
-              不保留
-            </Button>
-            <Badge v-if="saved" variant="success">报告已保留</Badge>
-            <Button variant="secondary" @click="goRehab">查看康复计划</Button>
-            <Button variant="ghost" @click="goHome">返回总览</Button>
-          </div>
-
-          <ClinicalStateNotice
-            v-if="savingReport"
-            class="mt-4"
-            tone="loading"
-            title="正在保存并生成康复计划"
-            description="请稍候，系统正在合并最近已保留报告并生成草案。"
+        <!-- 骨龄评估单独走 BoneAgeResultCard -->
+        <div v-if="uploadType === 'bone' && boneAgeResult" class="mb-4">
+          <BoneAgeResultCard
+            :task-id="taskId || ''"
+            :result="boneAgeResult"
+            :source="boneAgeSource"
+            :estimated-at="boneAgeEstimatedAt"
           />
-
-          <ClinicalStateNotice
-            v-else-if="draftGenerationError"
-            class="mt-4"
-            tone="error"
-            title="康复计划草案生成失败"
-            :description="draftGenerationError"
-          />
-        </div>
-      </ClinicalSurfaceCard>
-    </div>
-
-    <ClinicalSurfaceCard
-      v-if="saved && rehabPlanDraft"
-      ref="draftSectionRef"
-      title="康复计划草案"
-      :class="draftRevealActive ? 'ring-2 ring-[color:var(--accent-strong)] ring-offset-2 ring-offset-[color:var(--page-bg)]' : ''"
-    >
-      <div class="space-y-4">
-        <div class="rounded-[1.25rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-4">
-          <p class="text-sm font-semibold text-slate-950">计划摘要</p>
-          <div class="mt-3 grid gap-3 sm:grid-cols-2">
-            <div class="rounded-[1rem] bg-white px-3 py-3 text-sm text-slate-700">
-              <p class="text-xs text-slate-500">重点</p>
-              <p class="mt-1 font-semibold text-slate-950">{{ rehabPlanDraft.summary.focus }}</p>
-            </div>
-            <div class="rounded-[1rem] bg-white px-3 py-3 text-sm text-slate-700">
-              <p class="text-xs text-slate-500">频率</p>
-              <p class="mt-1 font-semibold text-slate-950">{{ rehabPlanDraft.summary.frequency }}</p>
-            </div>
-            <div class="rounded-[1rem] bg-white px-3 py-3 text-sm text-slate-700">
-              <p class="text-xs text-slate-500">时长</p>
-              <p class="mt-1 font-semibold text-slate-950">{{ rehabPlanDraft.summary.duration }}</p>
-            </div>
-            <div class="rounded-[1rem] bg-white px-3 py-3 text-sm text-slate-700">
-              <p class="text-xs text-slate-500">强度</p>
-              <p class="mt-1 font-semibold text-slate-950">{{ rehabPlanDraft.summary.intensity }}</p>
-            </div>
+          <div class="mt-4 flex gap-2">
+            <button
+              type="button"
+              class="flex h-12 flex-1 items-center justify-center rounded-full border text-[14px] font-medium transition active:scale-[0.98]"
+              style="background: var(--card); border-color: var(--border); color: var(--foreground);"
+              @click="viewBoneAgeHistory"
+            >查看历史记录</button>
+            <button
+              type="button"
+              class="flex h-12 flex-1 items-center justify-center rounded-full text-[14px] font-medium transition active:scale-[0.98]"
+              style="background: var(--secondary); color: var(--foreground);"
+              @click="goHome"
+            >返回总览</button>
           </div>
         </div>
-
-        <div class="rounded-[1.25rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-4">
-          <div class="flex items-center justify-between gap-3">
-            <p class="text-sm font-semibold text-slate-950">动作清单</p>
-            <p class="text-xs text-slate-500">共 {{ rehabPlanDraft.exercises.length }} 项</p>
+        <template v-else>
+        <!-- Title + risk badge -->
+        <div class="flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <h2 class="text-[19px] font-semibold" style="color: var(--foreground);">分析报告</h2>
+            <p v-if="report.title" class="mt-1 truncate text-[13px]" style="color: var(--muted-foreground);">
+              {{ report.title }}
+            </p>
           </div>
-          <div class="mt-3 space-y-3">
+          <span
+            class="whitespace-nowrap rounded-full px-3 py-1 text-[12px] font-semibold"
+            :style="riskBadgeStyle"
+          >{{ report.riskLevel }}</span>
+        </div>
+
+        <!-- Summary -->
+        <p class="mt-3 text-[15px] leading-relaxed" style="color: var(--foreground);">{{ report.summary }}</p>
+
+        <!-- 康复重点 -->
+        <div class="mt-3 flex items-center gap-2">
+          <iconify-icon icon="solar:target-outline" width="16" height="16" class="shrink-0" style="color: var(--brand-500);" />
+          <span class="text-[14px] font-semibold" style="color: var(--foreground);">康复重点：{{ report.rehabFocus }}</span>
+        </div>
+
+        <!-- 关注点 -->
+        <div class="mt-4 rounded-[12.8px] p-4" style="background: var(--background-100);">
+          <div class="mb-2 flex items-center gap-2">
+            <iconify-icon icon="solar:eye-outline" width="16" height="16" style="color: var(--muted-foreground);" />
+            <span class="text-[14px] font-semibold" style="color: var(--foreground);">关注点</span>
+          </div>
+          <ul class="space-y-2">
+            <li
+              v-for="(point, idx) in report.points"
+              :key="`point-${idx}`"
+              class="flex items-start gap-2 text-[14px]"
+              style="color: var(--foreground);"
+            >
+              <span class="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" :style="pointDotStyle(idx, 'point')"></span>
+              <span>{{ point }}</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- 建议 -->
+        <div class="mt-3 rounded-[12.8px] p-4" style="background: var(--background-100);">
+          <div class="mb-2 flex items-center gap-2">
+            <iconify-icon icon="solar:lightbulb-outline" width="16" height="16" style="color: var(--muted-foreground);" />
+            <span class="text-[14px] font-semibold" style="color: var(--foreground);">建议</span>
+          </div>
+          <ul class="space-y-2">
+            <li
+              v-for="(advice, idx) in report.advice"
+              :key="`advice-${idx}`"
+              class="flex items-start gap-2 text-[14px]"
+              style="color: var(--foreground);"
+            >
+              <span class="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" style="background: var(--brand-500);"></span>
+              <span>{{ advice }}</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- 后续观察 -->
+        <div class="mt-3 rounded-[12.8px] p-4" style="background: var(--background-100);">
+          <div class="mb-2 flex items-center gap-2">
+            <iconify-icon icon="solar:telescope-outline" width="16" height="16" style="color: var(--muted-foreground);" />
+            <span class="text-[14px] font-semibold" style="color: var(--foreground);">后续观察</span>
+          </div>
+          <ul class="space-y-2">
+            <li
+              v-for="(item, idx) in report.followUp"
+              :key="`follow-${idx}`"
+              class="flex items-start gap-2 text-[14px]"
+              style="color: var(--foreground);"
+            >
+              <span class="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" style="background: var(--chart-4);"></span>
+              <span>{{ item }}</span>
+            </li>
+          </ul>
+          <div
+            v-if="report.caution"
+            class="mt-3 flex items-start gap-2 rounded-[9.6px] p-3"
+            style="background: var(--state-error-surface);"
+          >
+            <iconify-icon icon="solar:danger-triangle-outline" width="16" height="16" class="mt-0.5 shrink-0" style="color: var(--state-error);" />
+            <span class="text-[12px]" style="color: var(--state-error);">{{ report.caution }}</span>
+          </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="mt-4 space-y-2">
+          <button
+            v-if="!saved"
+            type="button"
+            class="flex h-12 w-full items-center justify-center gap-2 rounded-full text-[15px] font-semibold transition active:scale-[0.98] disabled:opacity-60"
+            style="background: var(--primary); color: var(--primary-foreground);"
+            :disabled="savingReport"
+            @click="handleSaveReport"
+          >
+            <iconify-icon icon="solar:dumbbell-outline" width="20" height="20" />
+            {{ savingReport ? '生成中…' : '保留并生成康复计划' }}
+          </button>
+          <button
+            v-if="!saved"
+            type="button"
+            class="flex h-12 w-full items-center justify-center rounded-full border text-[15px] font-medium transition active:scale-[0.98] disabled:opacity-60"
+            style="background: var(--card); border-color: var(--border); color: var(--foreground);"
+            :disabled="savingReport"
+            @click="handleDiscardReport"
+          >不保留</button>
+          <div
+            v-if="saved"
+            class="flex items-center justify-center gap-2 rounded-full py-3 text-[14px] font-medium"
+            style="background: var(--state-success-surface); color: var(--state-success);"
+          >
+            <iconify-icon icon="solar:check-circle-bold" width="18" height="18" />
+            报告已保留
+          </div>
+          <div class="flex gap-2">
+            <button
+              v-if="saved"
+              type="button"
+              class="flex h-12 flex-1 items-center justify-center rounded-full border text-[14px] font-medium transition active:scale-[0.98]"
+              style="background: var(--card); border-color: var(--border); color: var(--foreground);"
+              @click="goRehab"
+            >查看康复计划</button>
+            <button
+              type="button"
+              class="flex h-12 flex-1 items-center justify-center rounded-full text-[14px] font-medium transition active:scale-[0.98]"
+              style="background: var(--secondary); color: var(--foreground);"
+              @click="goHome"
+            >返回总览</button>
+          </div>
+        </div>
+
+        <!-- Loading state -->
+        <div
+          v-if="savingReport"
+          class="mt-3 rounded-[12.8px] p-3 text-center text-[13px]"
+          style="background: var(--background-100); color: var(--muted-foreground);"
+        >
+          正在保存并生成康复计划，请稍候…
+        </div>
+
+        <!-- Error state -->
+        <div
+          v-if="draftGenerationError"
+          class="mt-3 rounded-[12.8px] p-3 text-[13px]"
+          style="background: var(--state-error-surface); color: var(--state-error);"
+        >
+          康复计划草案生成失败：{{ draftGenerationError }}
+        </div>
+        </template>
+      </section>
+
+      <!-- Rehab Plan Draft (preserved feature, not in design mockup) -->
+      <section
+        v-if="saved && rehabPlanDraft"
+        ref="draftSectionRef"
+        class="mt-4 rounded-[19.2px] border p-5 transition-all duration-500"
+        :class="draftRevealActive ? 'translate-y-2 scale-[1.01]' : ''"
+        style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
+      >
+        <h2 class="text-[19px] font-semibold" style="color: var(--foreground);">康复计划草案</h2>
+
+        <!-- Plan summary -->
+        <div class="mt-3 grid grid-cols-2 gap-2">
+          <div class="rounded-[10px] p-3" style="background: var(--secondary);">
+            <p class="text-[11px]" style="color: var(--muted-foreground);">重点</p>
+            <p class="mt-1 text-[14px] font-semibold" style="color: var(--foreground);">{{ rehabPlanDraft.summary.focus }}</p>
+          </div>
+          <div class="rounded-[10px] p-3" style="background: var(--secondary);">
+            <p class="text-[11px]" style="color: var(--muted-foreground);">频率</p>
+            <p class="mt-1 text-[14px] font-semibold" style="color: var(--foreground);">{{ rehabPlanDraft.summary.frequency }}</p>
+          </div>
+          <div class="rounded-[10px] p-3" style="background: var(--secondary);">
+            <p class="text-[11px]" style="color: var(--muted-foreground);">时长</p>
+            <p class="mt-1 text-[14px] font-semibold" style="color: var(--foreground);">{{ rehabPlanDraft.summary.duration }}</p>
+          </div>
+          <div class="rounded-[10px] p-3" style="background: var(--secondary);">
+            <p class="text-[11px]" style="color: var(--muted-foreground);">强度</p>
+            <p class="mt-1 text-[14px] font-semibold" style="color: var(--foreground);">{{ rehabPlanDraft.summary.intensity }}</p>
+          </div>
+        </div>
+
+        <!-- Exercise list -->
+        <div class="mt-4">
+          <div class="flex items-center justify-between">
+            <p class="text-[15px] font-semibold" style="color: var(--foreground);">动作清单</p>
+            <p class="text-[13px]" style="color: var(--muted-foreground);">共 {{ rehabPlanDraft.exercises.length }} 项</p>
+          </div>
+          <div class="mt-2 space-y-2">
             <article
               v-for="exercise in rehabPlanDraft.exercises"
               :key="`${exercise.mode}_${exercise.name}`"
-              class="rounded-[1rem] bg-white px-4 py-4"
+              class="rounded-[12.8px] border p-3"
+              style="background: var(--card); border-color: var(--border);"
             >
               <div class="flex flex-wrap items-center gap-2">
-                <p class="text-sm font-semibold text-slate-950">{{ exercise.name }}</p>
-                <Badge :variant="exercise.mode === 'generated' ? 'warning' : 'default'">
-                  {{ exercise.mode === 'generated' ? '新增动作' : '复用动作库' }}
-                </Badge>
-                <Badge>{{ exercise.level }}</Badge>
+                <p class="text-[14px] font-semibold" style="color: var(--foreground);">{{ exercise.name }}</p>
+                <span
+                  class="rounded-full px-2 py-0.5 text-[11px] font-medium"
+                  :style="exercise.mode === 'generated'
+                    ? { background: '#fff4e6', color: '#b25c00' }
+                    : { background: 'var(--secondary)', color: 'var(--muted-foreground)' }"
+                >{{ exercise.mode === 'generated' ? '新增动作' : '复用动作库' }}</span>
+                <span class="rounded-full px-2 py-0.5 text-[11px] font-medium" style="background: var(--secondary); color: var(--muted-foreground);">{{ exercise.level }}</span>
               </div>
-              <p class="mt-2 text-sm text-slate-600">{{ exercise.focus }}</p>
-              <div class="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
-                <span class="rounded-full bg-[color:var(--surface-secondary)] px-3 py-1">{{ exercise.category }}</span>
-                <span class="rounded-full bg-[color:var(--surface-secondary)] px-3 py-1">{{ exercise.duration }}</span>
-                <span class="rounded-full bg-[color:var(--surface-secondary)] px-3 py-1">{{ exercise.minutes }} 分钟</span>
+              <p class="mt-1.5 text-[13px]" style="color: var(--muted-foreground);">{{ exercise.focus }}</p>
+              <div class="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                <span class="rounded-full px-2.5 py-1" style="background: var(--secondary); color: var(--muted-foreground);">{{ exercise.category }}</span>
+                <span class="rounded-full px-2.5 py-1" style="background: var(--secondary); color: var(--muted-foreground);">{{ exercise.duration }}</span>
+                <span class="rounded-full px-2.5 py-1" style="background: var(--secondary); color: var(--muted-foreground);">{{ exercise.minutes }} 分钟</span>
               </div>
             </article>
           </div>
         </div>
 
-        <div class="rounded-[1.25rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-4">
-          <p class="text-sm font-semibold text-slate-950">统一提醒</p>
-          <p class="mt-2 text-sm text-slate-700">
-            {{ rehabPlanDraft.reminder.time }} / {{ rehabPlanDraft.reminder.days.join('、') }} /
+        <!-- Reminder -->
+        <div class="mt-3 rounded-[12.8px] p-3" style="background: var(--background-100);">
+          <p class="text-[13px] font-semibold" style="color: var(--foreground);">统一提醒</p>
+          <p class="mt-1 text-[13px]" style="color: var(--muted-foreground);">
+            {{ rehabPlanDraft.reminder.time }} · {{ rehabPlanDraft.reminder.days.join('、') }} ·
             {{ rehabPlanDraft.reminder.pushEnabled ? '系统通知开启' : '系统通知关闭' }}
           </p>
         </div>
 
-        <div class="flex flex-wrap gap-2">
-          <Button :loading="applyingPlan" @click="handleApplyPlanDraft">应用到康复计划</Button>
-          <Button variant="secondary" :disabled="applyingPlan" @click="goRehab">稍后去康复页确认</Button>
+        <!-- Apply buttons -->
+        <div class="mt-4 flex gap-2">
+          <button
+            type="button"
+            class="flex h-12 flex-1 items-center justify-center rounded-full text-[15px] font-semibold transition active:scale-[0.98] disabled:opacity-60"
+            style="background: var(--primary); color: var(--primary-foreground);"
+            :disabled="applyingPlan"
+            @click="handleApplyPlanDraft"
+          >{{ applyingPlan ? '应用中…' : '应用到康复计划' }}</button>
+          <button
+            type="button"
+            class="flex h-12 flex-1 items-center justify-center rounded-full border text-[14px] font-medium transition active:scale-[0.98]"
+            style="background: var(--card); border-color: var(--border); color: var(--foreground);"
+            :disabled="applyingPlan"
+            @click="goRehab"
+          >稍后确认</button>
         </div>
-      </div>
-    </ClinicalSurfaceCard>
+      </section>
+    </div>
   </div>
 </template>
 
@@ -264,32 +470,29 @@ import { applyRehabPlanDraft, type RehabPlanDraft } from '@/api/modules/rehab'
 import {
   createAnalyzeTask,
   discardAnalyzeReport,
+  estimateBoneAge,
   getAnalyzeResult,
   saveAnalyzeReport,
   type AnalyzeReport,
+  type BoneAgeResult,
 } from '@/api/modules/upload'
 import { useToast } from '@/composables/useToast'
-import ClinicalPageHeader from '@/shared/components/clinical/ClinicalPageHeader.vue'
-import ClinicalFeatureNavBar from '@/shared/components/clinical/ClinicalFeatureNavBar.vue'
-import ClinicalStateNotice from '@/shared/components/clinical/ClinicalStateNotice.vue'
-import ClinicalSurfaceCard from '@/shared/components/clinical/ClinicalSurfaceCard.vue'
-import Badge from '@/shared/components/ui/Badge.vue'
-import Button from '@/shared/components/ui/Button.vue'
-import Progress from '@/shared/components/ui/Progress.vue'
 import { needsModelImageTranscode, normalizeFilesForModel } from '@/shared/utils/modelImage'
+import BoneAgeResultCard from './BoneAgeResultCard.vue'
 
-type UploadType = 'image' | 'lab' | 'text' | 'symptom' | null
+type UploadType = 'image' | 'lab' | 'text' | 'symptom' | 'bone' | null
 type UploadStatus = 'idle' | 'uploading' | 'analyzing' | 'complete'
 
 const router = useRouter()
 const { success, info, warning, error } = useToast()
 
 const typeOptions = [
-  { key: 'image', label: '影像资料', hint: '支持图片、扫描件和影像截图' },
-  { key: 'lab', label: '化验报告', hint: '支持 PDF、图片和报告文件' },
-  { key: 'text', label: '文字报告', hint: '适合直接粘贴检查结论或病历摘要' },
-  { key: 'symptom', label: '症状描述', hint: '适合补充近期状态和主观感受' },
-] as const
+  { key: 'image' as const, label: '影像资料', hint: '图片、扫描件、影像截图', icon: 'solar:gallery-outline' },
+  { key: 'lab' as const, label: '化验报告', hint: 'PDF、图片、报告文件', icon: 'solar:document-text-outline' },
+  { key: 'text' as const, label: '文字报告', hint: '粘贴检查结论或病历', icon: 'solar:document-add-outline' },
+  { key: 'symptom' as const, label: '症状描述', hint: '补充近期状态和感受', icon: 'solar:clipboard-list-outline' },
+  { key: 'bone' as const, label: '骨龄评估', hint: '左手腕 X 光片', icon: 'solar:bone-outline' },
+]
 
 const uploadType = ref<UploadType>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -308,17 +511,43 @@ const draftGenerationError = ref('')
 const convertedUnsupportedImages = ref(false)
 const reportSectionRef = ref<HTMLElement | null>(null)
 const draftSectionRef = ref<HTMLElement | null>(null)
+const progressSectionRef = ref<HTMLElement | null>(null)
 const reportRevealActive = ref(false)
 const draftRevealActive = ref(false)
 
-const isFileType = computed(() => uploadType.value === 'image' || uploadType.value === 'lab')
+// 骨龄评估专用状态（同步调用，不走 task 轮询）
+const boneAgeResult = ref<BoneAgeResult | null>(null)
+const boneAgeSource = ref<string>('')
+const boneAgeEstimatedAt = ref<string>('')
+
+const isFileType = computed(() => uploadType.value === 'image' || uploadType.value === 'lab' || uploadType.value === 'bone')
 const isTextType = computed(() => uploadType.value === 'text' || uploadType.value === 'symptom')
 const isSubmitting = computed(() => status.value === 'uploading' || status.value === 'analyzing')
 
-const fileAccept = computed(() => (uploadType.value === 'image' ? 'image/*,.dcm' : '.pdf,image/*,.txt'))
-const fileHint = computed(() =>
-  uploadType.value === 'image' ? '支持上传多张图片或影像文件' : '支持 PDF、图片或文本文件',
-)
+const fileAccept = computed(() => {
+  if (uploadType.value === 'image') return 'image/*,.dcm'
+  if (uploadType.value === 'bone') return 'image/*,.dcm'
+  return '.pdf,image/*,.txt'
+})
+const fileHint = computed(() => {
+  if (uploadType.value === 'image') return '支持 JPG、PNG、PDF，单文件最大 20MB'
+  if (uploadType.value === 'bone') return '支持 JPG、PNG、DICOM，建议左手腕正位 X 光片'
+  return '支持 PDF、JPG、PNG，单文件最大 20MB'
+})
+
+// 示例图片：按资料类型分组
+const sampleImages = [
+  { name: '血常规化验单', url: '/pictures/upload/blood_test_report.svg', category: '化验报告', type: 'lab' as const },
+  { name: '胸部 CT 报告', url: '/pictures/upload/ct_report.svg', category: '影像报告', type: 'image' as const },
+  { name: '健康体检摘要', url: '/pictures/upload/health_checkup.svg', category: '体检报告', type: 'lab' as const },
+  { name: '心电图报告', url: '/pictures/upload/ecg_report.svg', category: '检查报告', type: 'image' as const },
+]
+
+const visibleSampleImages = computed(() => {
+  if (uploadType.value === 'image') return sampleImages.filter((i) => i.type === 'image')
+  if (uploadType.value === 'lab') return sampleImages.filter((i) => i.type === 'lab' || i.type === 'image')
+  return []
+})
 const statusText = computed(() => {
   if (status.value === 'uploading') return '正在上传资料'
   if (status.value === 'analyzing') return '正在调用大模型分析'
@@ -326,12 +555,24 @@ const statusText = computed(() => {
   return '等待开始'
 })
 
-const riskBadgeVariant = computed(() => {
-  if (!report.value) return 'default'
-  if (report.value.riskLevel === '高风险') return 'danger'
-  if (report.value.riskLevel === '中等风险') return 'warning'
-  return 'success'
+const riskBadgeStyle = computed(() => {
+  if (!report.value) return { background: 'var(--secondary)', color: 'var(--muted-foreground)' }
+  if (report.value.riskLevel === '高风险') return { background: 'var(--state-error-surface)', color: 'var(--state-error)' }
+  if (report.value.riskLevel === '中等风险') return { background: '#fff4e6', color: '#b25c00' }
+  return { background: 'var(--state-success-surface)', color: 'var(--state-success)' }
 })
+
+const pointDotStyle = (_idx: number, _type: string) => {
+  // Alternate colors for visual variety
+  const colors = ['var(--state-error)', 'var(--chart-3)', 'var(--state-success)']
+  return { background: colors[_idx % colors.length] }
+}
+
+const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -379,6 +620,9 @@ const clearResult = () => {
   rehabPlanDraft.value = null
   draftGenerationError.value = ''
   convertedUnsupportedImages.value = false
+  boneAgeResult.value = null
+  boneAgeSource.value = ''
+  boneAgeEstimatedAt.value = ''
 }
 
 const selectType = (value: UploadType) => {
@@ -392,6 +636,18 @@ const selectType = (value: UploadType) => {
 const onFileChange = (event: Event) => {
   const input = event.target as HTMLInputElement
   selectedFiles.value = Array.from(input.files ?? [])
+}
+
+async function useSampleImage(url: string, name: string) {
+  try {
+    const res = await fetch(url)
+    const blob = await res.blob()
+    const file = new File([blob], name, { type: blob.type || 'image/svg+xml' })
+    selectedFiles.value = [file]
+    success('示例文件已加载', '点击"开始分析"继续。')
+  } catch (err) {
+    error('示例文件加载失败', err instanceof Error ? err.message : '请稍后重试。')
+  }
 }
 
 const validateSubmission = () => {
@@ -443,6 +699,26 @@ const pollResult = async (id: string) => {
 const submit = async () => {
   status.value = 'uploading'
   progress.value = 10
+
+  // 骨龄评估走同步调用，不走 createAnalyzeTask + 轮询流程
+  if (uploadType.value === 'bone') {
+    if (!selectedFiles.value.length) {
+      throw new Error('请先上传左手腕 X 光图片。')
+    }
+    const file = selectedFiles.value[0]
+    progress.value = 45
+    status.value = 'analyzing'
+    const resp = await estimateBoneAge(file)
+    taskId.value = resp.taskId
+    boneAgeResult.value = resp.result
+    boneAgeSource.value = resp.source
+    boneAgeEstimatedAt.value = resp.estimatedAt ?? ''
+    status.value = 'complete'
+    progress.value = 100
+    success('骨龄评估完成', `估算骨龄 ${resp.result.estimatedAgeYears ?? '--'} 岁。`)
+    await revealReportSection()
+    return
+  }
 
   const normalizedFiles = await normalizeFilesForModel(selectedFiles.value)
   convertedUnsupportedImages.value = normalizedFiles.some((file, index) => file !== selectedFiles.value[index])
@@ -547,4 +823,9 @@ const handleDiscardReport = async () => {
 
 const goRehab = () => router.push('/rehab')
 const goHome = () => router.push('/home')
+
+const viewBoneAgeHistory = () => {
+  // 暂未单独的历史页，先提示用户
+  info('历史记录', '骨龄评估历史记录可通过"我的-健康档案"查看（开发中）。')
+}
 </script>

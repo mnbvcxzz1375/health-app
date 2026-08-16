@@ -76,7 +76,8 @@ export async function syncDevice(id: number): Promise<DeviceItem> {
       }
       target.connected = true
       target.lastSyncAt = nowIsoString()
-      target.battery = Math.max(12, Math.min(100, target.battery - Math.floor(Math.random() * 4)))
+      // Development fixtures must not invent a battery change during sync.
+      // Real battery telemetry is supplied by the backend/device provider.
       return cloneMock(target)
     },
   )

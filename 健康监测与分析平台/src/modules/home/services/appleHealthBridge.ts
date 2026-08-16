@@ -11,6 +11,8 @@
  * - HKQuantityType: https://developer.apple.com/documentation/healthkit/hkquantitytype
  */
 
+import { env } from '@/config/env'
+
 export type AppleHealthAvailability = {
   available: boolean
   source: 'native' | 'mock'
@@ -94,14 +96,37 @@ export async function ensureAppleHealthAvailable(): Promise<AppleHealthBridge> {
 
 export async function readAppleHealthSnapshot(): Promise<AppleHealthSnapshot> {
   const bridge = getNativeBridge()
+  let snapshot: AppleHealthSnapshot
   if (bridge) {
     const availability = await bridge.isAvailable()
     if (availability.available) {
       await bridge.requestRead()
-      return bridge.readSnapshot()
+      snapshot = await bridge.readSnapshot()
+    } else if (env.useDevMock) {
+      snapshot = mockAppleHealthSnapshot()
+    } else {
+      throw new Error('当前环境未接入 Apple Health 原生桥')
     }
+  } else if (env.useDevMock) {
+    snapshot = mockAppleHealthSnapshot()
+  } else {
+    throw new Error('当前环境未接入 Apple Health 原生桥')
   }
-  return mockAppleHealthSnapshot()
+  // 异步推送至后端入库（失败静默，不阻塞原流程）
+  void pushAppleHealthSnapshotToBackend(snapshot).catch((err) => {
+    console.warn('[appleHealthBridge] push snapshot to backend failed:', err)
+  })
+  return snapshot
+}
+
+/**
+ * 将 Apple Health 快照推送到后端设备聚合平台，写入 monitor_records 扩展列。
+ * 失败时静默，不影响前端原有流程。
+ */
+async function pushAppleHealthSnapshotToBackend(snapshot: AppleHealthSnapshot): Promise<void> {
+  // 动态 import 避免循环依赖（deviceAggregation.ts 间接依赖 appleHealthBridge）
+  const { pushAppleHealthSnapshot } = await import('@/api/modules/deviceAggregation')
+  await pushAppleHealthSnapshot(snapshot)
 }
 
 function mockAppleHealthSnapshot(): AppleHealthSnapshot {

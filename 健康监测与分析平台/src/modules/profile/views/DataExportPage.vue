@@ -1,115 +1,157 @@
 <template>
-  <div class="space-y-5 pb-4 text-slate-950">
-    <ClinicalPageHeader
-      eyebrow="Data Export"
-      title="导出数据"
-      description="按时间范围和数据类型导出健康记录，兼顾归档、打印和二次分析场景。"
-      :meta="formatLabel"
-      meta-label="导出格式"
-    >
-      <Button variant="secondary" @click="goBack">
-        <iconify-icon icon="solar:alt-arrow-left-outline" width="16" height="16" />
-        返回
-      </Button>
-    </ClinicalPageHeader>
-
-    <section class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-      <ClinicalStatCard label="导出范围" :value="dateRangeLabel" hint="可自定义或快速填充最近 30 天" icon="solar:calendar-outline" tone="default" />
-      <ClinicalStatCard label="数据类型" :value="`${selectedTypeCount} 类`" hint="至少选择一种数据类型" icon="solar:documents-outline" tone="info" />
-      <ClinicalStatCard label="任务状态" :value="statusLabel" :hint="statusHint" icon="solar:download-outline" tone="success" />
-    </section>
-
-    <div class="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-      <ClinicalSurfaceCard
-        eyebrow="Export Scope"
-        title="导出范围"
-        description="选择起止日期和输出格式，决定后续文件结构。"
+  <ProfileSubPage title="导出数据" subtitle="按时间范围和数据类型导出健康记录">
+    <div class="space-y-5">
+      <!-- 状态概览 -->
+      <section
+        class="rounded-[19.2px] border p-5"
+        style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
       >
-        <div class="grid gap-3 sm:grid-cols-2">
+        <div class="grid grid-cols-3 gap-3">
+          <div class="rounded-[10px] p-3" style="background: var(--secondary);">
+            <p class="text-[11px]" style="color: var(--muted-foreground);">导出范围</p>
+            <p class="mt-1 text-[14px] font-semibold" style="color: var(--foreground);">{{ dateRangeLabel }}</p>
+          </div>
+          <div class="rounded-[10px] p-3" style="background: var(--secondary);">
+            <p class="text-[11px]" style="color: var(--muted-foreground);">数据类型</p>
+            <p class="mt-1 text-[14px] font-semibold" style="color: var(--foreground);">{{ selectedTypeCount }} 类</p>
+          </div>
+          <div class="rounded-[10px] p-3" style="background: var(--secondary);">
+            <p class="text-[11px]" style="color: var(--muted-foreground);">任务状态</p>
+            <p class="mt-1 text-[14px] font-semibold" style="color: var(--foreground);">{{ statusLabel }}</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 导出范围 -->
+      <section
+        class="rounded-[19.2px] border p-[18px]"
+        style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
+      >
+        <h2 class="text-[17px] font-semibold" style="color: var(--foreground);">导出范围</h2>
+        <p class="mt-0.5 text-[13px]" style="color: var(--muted-foreground);">选择起止日期和输出格式。</p>
+        <div class="mt-3 grid grid-cols-2 gap-3">
           <label class="block">
-            <span class="text-xs text-slate-500">开始日期</span>
-            <input v-model="startDate" type="date" class="mt-1 w-full rounded-[1rem] border border-[color:var(--surface-border)] px-3 py-2.5 text-sm outline-none focus:border-[color:var(--ring)]" />
+            <span class="text-[13px]" style="color: var(--muted-foreground);">开始日期</span>
+            <input
+              v-model="startDate"
+              type="date"
+              class="mt-1.5 h-12 w-full rounded-[12px] border px-3 text-[15px] outline-none transition focus:ring-2 focus:ring-[color:var(--ring)]"
+              style="background: var(--secondary); border-color: var(--border); color: var(--foreground);"
+            />
           </label>
           <label class="block">
-            <span class="text-xs text-slate-500">结束日期</span>
-            <input v-model="endDate" type="date" class="mt-1 w-full rounded-[1rem] border border-[color:var(--surface-border)] px-3 py-2.5 text-sm outline-none focus:border-[color:var(--ring)]" />
+            <span class="text-[13px]" style="color: var(--muted-foreground);">结束日期</span>
+            <input
+              v-model="endDate"
+              type="date"
+              class="mt-1.5 h-12 w-full rounded-[12px] border px-3 text-[15px] outline-none transition focus:ring-2 focus:ring-[color:var(--ring)]"
+              style="background: var(--secondary); border-color: var(--border); color: var(--foreground);"
+            />
           </label>
         </div>
 
-        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+        <div class="mt-4 grid grid-cols-2 gap-3">
           <button
             v-for="fmt in formats"
             :key="fmt.value"
             type="button"
-            class="rounded-[1.2rem] border px-4 py-4 text-left transition"
-            :class="format === fmt.value ? 'border-teal-300 bg-teal-50' : 'border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] hover:border-teal-200'"
+            class="rounded-[12px] border px-4 py-4 text-left transition active:scale-[0.99]"
+            :style="format === fmt.value
+              ? { background: 'var(--brand-50)', borderColor: 'var(--brand-500)' }
+              : { background: 'var(--secondary)', borderColor: 'var(--border)' }"
             @click="format = fmt.value"
           >
-            <p class="font-semibold text-slate-950">{{ fmt.label }}</p>
-            <p class="mt-1 text-sm leading-6 text-slate-600">{{ fmt.desc }}</p>
+            <p
+              class="text-[15px] font-semibold"
+              :style="format === fmt.value ? { color: 'var(--brand-500)' } : { color: 'var(--foreground)' }"
+            >{{ fmt.label }}</p>
+            <p class="mt-1 text-[12px] leading-4" style="color: var(--muted-foreground);">{{ fmt.desc }}</p>
           </button>
         </div>
-      </ClinicalSurfaceCard>
+      </section>
 
-      <ClinicalSurfaceCard
-        eyebrow="Data Groups"
-        title="数据类型"
-        description="按需导出监测数据、上传资料、康复记录和提醒事件。"
+      <!-- 数据类型 -->
+      <section
+        class="rounded-[19.2px] border p-[18px]"
+        style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
       >
-        <div class="space-y-3">
+        <h2 class="text-[17px] font-semibold" style="color: var(--foreground);">数据类型</h2>
+        <p class="mt-0.5 text-[13px]" style="color: var(--muted-foreground);">至少选择一种可导出的内容。</p>
+        <div class="mt-3 space-y-2">
           <label
             v-for="item in typeOptions"
             :key="item.key"
-            class="flex items-start gap-3 rounded-[1.2rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-3"
+            class="flex items-start gap-3 rounded-[12px] border px-4 py-3"
+            style="background: var(--secondary); border-color: var(--border);"
           >
-            <input v-model="types[item.key]" type="checkbox" class="mt-1 h-4 w-4" />
+            <input v-model="types[item.key]" type="checkbox" class="mt-0.5 h-5 w-5 accent-[color:var(--brand-500)]" />
             <div>
-              <p class="text-sm font-semibold text-slate-950">{{ item.label }}</p>
-              <p class="mt-1 text-sm leading-6 text-slate-600">{{ item.desc }}</p>
+              <p class="text-[15px] font-medium" style="color: var(--foreground);">{{ item.label }}</p>
+              <p class="mt-0.5 text-[12px] leading-4" style="color: var(--muted-foreground);">{{ item.desc }}</p>
             </div>
           </label>
         </div>
-      </ClinicalSurfaceCard>
-    </div>
+      </section>
 
-    <ClinicalSurfaceCard
-      eyebrow="Export Progress"
-      :title="status === 'done' ? '导出完成' : '导出进度'"
-      description="导出任务采用异步方式执行，适合 Beta 阶段做性能观测。"
-    >
-      <div class="rounded-[1.25rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-4">
-        <div class="mb-2 flex items-center justify-between text-sm">
-          <span class="text-slate-600">当前进度</span>
-          <Badge>{{ progress }}%</Badge>
+      <!-- 导出进度 -->
+      <section
+        class="rounded-[19.2px] border p-[18px]"
+        style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
+      >
+        <h2 class="text-[17px] font-semibold" style="color: var(--foreground);">
+          {{ status === 'done' ? '导出完成' : '导出进度' }}
+        </h2>
+        <div
+          class="mt-3 rounded-[12px] border p-4"
+          style="background: var(--secondary); border-color: var(--border);"
+        >
+          <div class="mb-2 flex items-center justify-between text-[13px]">
+            <span style="color: var(--muted-foreground);">当前进度</span>
+            <span class="font-semibold tabular-nums" style="color: var(--foreground);">{{ progress }}%</span>
+          </div>
+          <div class="w-full overflow-hidden rounded-full" style="height: 6px; background: var(--background-200);">
+            <div
+              class="h-full rounded-full transition-all"
+              :style="{ width: `${progress}%`, background: 'var(--state-success)' }"
+            />
+          </div>
+          <p class="mt-3 text-[13px] leading-5" style="color: var(--muted-foreground);">{{ statusHint }}</p>
         </div>
-        <div class="h-2 rounded-full bg-white">
-          <div class="h-full rounded-full bg-teal-600 transition-all" :style="{ width: `${progress}%` }" />
-        </div>
-        <p class="mt-3 text-sm leading-6 text-slate-600">{{ statusHint }}</p>
+      </section>
+
+      <!-- 操作按钮 -->
+      <div class="flex gap-3">
+        <button
+          type="button"
+          class="flex h-[48px] flex-1 items-center justify-center rounded-full text-[15px] font-medium transition active:scale-[0.98]"
+          style="background: var(--secondary); color: var(--foreground);"
+          :disabled="status === 'exporting'"
+          @click="fillRecent30Days"
+        >
+          最近 30 天
+        </button>
+        <button
+          type="button"
+          class="flex h-[48px] flex-1 items-center justify-center rounded-full text-[15px] font-semibold transition active:scale-[0.98] disabled:opacity-60"
+          style="background: var(--primary); color: var(--primary-foreground);"
+          :disabled="status === 'exporting'"
+          @click="handleExport"
+        >
+          {{ status === 'exporting' ? '导出中…' : '开始导出' }}
+        </button>
       </div>
-    </ClinicalSurfaceCard>
-
-    <div class="grid grid-cols-2 gap-2.5">
-      <Button variant="secondary" :disabled="status === 'exporting'" @click="fillRecent30Days">最近 30 天</Button>
-      <Button :loading="status === 'exporting'" @click="handleExport">开始导出</Button>
     </div>
-  </div>
+  </ProfileSubPage>
 </template>
 
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { useToast } from '@/composables/useToast'
-import ClinicalPageHeader from '@/shared/components/clinical/ClinicalPageHeader.vue'
-import ClinicalStatCard from '@/shared/components/clinical/ClinicalStatCard.vue'
-import ClinicalSurfaceCard from '@/shared/components/clinical/ClinicalSurfaceCard.vue'
-import Badge from '@/shared/components/ui/Badge.vue'
-import Button from '@/shared/components/ui/Button.vue'
+import ProfileSubPage from '../components/ProfileSubPage.vue'
 
 type ExportStatus = 'idle' | 'exporting' | 'done'
 type ExportTypeKey = 'monitor' | 'upload' | 'rehab' | 'alert'
 
-const router = useRouter()
 const { success, warning, info } = useToast()
 
 const today = new Date()
@@ -160,14 +202,6 @@ const statusLabel = computed(() => {
 })
 
 const formatDate = (date: Date) => date.toISOString().slice(0, 10)
-
-const goBack = () => {
-  if (window.history.length > 1) {
-    router.back()
-    return
-  }
-  router.push('/profile')
-}
 
 const fillRecent30Days = () => {
   const end = new Date(today)

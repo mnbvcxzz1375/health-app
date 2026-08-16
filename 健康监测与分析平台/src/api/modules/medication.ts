@@ -22,6 +22,9 @@ export type MedicationItem = {
   yoloEndpoint: string
   enabled: boolean
   reminders: MedicationReminder[]
+  medicineType?: 'western' | 'tcm' | 'formula'
+  formulaId?: number | null
+  clinicalInfoId?: number | null
 }
 
 export type MedicationReminderInput = {
@@ -454,20 +457,35 @@ export async function recognizeMedicationBatch(
     return { items: [] }
   }
 
-  const payload = new FormData()
-  files.forEach((file) => payload.append('files', file))
-  const { data } = await http.post<MedicationRecognitionBatchResult>(
-    '/medications/recognize',
-    payload,
-    {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 120_000,
+  return withMockFallback(
+    async () => {
+      const payload = new FormData()
+      files.forEach((file) => payload.append('files', file))
+      const { data } = await http.post<MedicationRecognitionBatchResult>(
+        '/medications/recognize',
+        payload,
+        { timeout: 120_000 },
+      )
+      return {
+        items: Array.isArray(data.items) ? data.items.map(normalizeMedicationRecognition) : [],
+      }
     },
+    () => ({
+      items: [
+        {
+          name: '示例药品（离线模式）',
+          alias: '离线识别结果',
+          dosageValue: null,
+          dosageUnit: '',
+          usage: '请检查后端服务是否正常',
+          notes: '',
+          photoUrl: '',
+          confidence: 0,
+          sourceText: '',
+        },
+      ],
+    }),
   )
-
-  return {
-    items: Array.isArray(data.items) ? data.items.map(normalizeMedicationRecognition) : [],
-  }
 }
 
 // === Phase 4: 药明白 API ===

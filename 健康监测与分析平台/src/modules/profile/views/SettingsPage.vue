@@ -1,213 +1,197 @@
 <template>
-  <div class="space-y-5 pb-4 text-slate-950">
-    <ClinicalPageHeader
-      eyebrow="个人设置"
-      title="个人设置"
-      description="统一维护基础档案、健康目标和提醒偏好。"
-      :meta="`${selectedGoals.size} 项目标`"
-      meta-label="当前关注"
-    >
-      <Button variant="secondary" @click="goBack">
-        <iconify-icon icon="solar:alt-arrow-left-outline" width="16" height="16" />
-        返回
-      </Button>
-    </ClinicalPageHeader>
-
-    <section class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-      <ClinicalStatCard
-        label="姓名"
-        :value="form.name || '未填写'"
-        :hint="form.email || '未绑定邮箱'"
-        icon="solar:user-outline"
-        tone="default"
-      />
-      <ClinicalStatCard
-        label="身体数据"
-        :value="`${form.height}cm / ${form.weight}kg`"
-        :hint="`${form.age} 岁 · ${genderLabel}`"
-        icon="solar:heart-pulse-outline"
-        tone="info"
-      />
-      <ClinicalStatCard
-        label="提醒偏好"
-        :value="`${enabledReminderCount}/3`"
-        hint="每日摘要、异常提醒、康复提醒"
-        icon="solar:bell-outline"
-        tone="success"
-      />
-    </section>
-
-    <div class="grid gap-4 xl:grid-cols-[1fr_0.95fr]">
-      <ClinicalSurfaceCard eyebrow="基础档案" title="基础信息" description="保持资料最新，建议才会更准确。">
-        <v-form>
-          <div class="grid gap-3 sm:grid-cols-2">
-            <v-text-field
-              v-model="form.name"
-              label="姓名"
-              density="comfortable"
-              hide-details="auto"
-            />
-
-            <v-text-field
-              v-model="form.email"
-              label="邮箱"
-              density="comfortable"
-              hide-details="auto"
-              disabled
-            />
-
-            <v-text-field
-              v-model.number="form.age"
-              label="年龄"
-              type="number"
-              min="1"
-              density="comfortable"
-              hide-details="auto"
-            />
-
-            <v-select
-              v-model="form.gender"
-              :items="genderOptions"
-              item-title="label"
-              item-value="value"
-              label="性别"
-              density="comfortable"
-              hide-details="auto"
-            />
-
-            <v-text-field
-              v-model.number="form.height"
-              label="身高 (cm)"
-              type="number"
-              min="80"
-              density="comfortable"
-              hide-details="auto"
-            />
-
-            <v-text-field
-              v-model.number="form.weight"
-              label="体重 (kg)"
-              type="number"
-              min="30"
-              density="comfortable"
-              hide-details="auto"
-            />
+  <ProfileSubPage title="个人设置" subtitle="管理基础资料、健康目标和通知偏好">
+    <form class="space-y-5" @submit.prevent="handleSave">
+      <!-- 头像卡片 -->
+      <section
+        class="rounded-[19.2px] border p-4"
+        style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
+      >
+        <div class="flex items-center gap-4">
+          <div
+            class="relative flex h-[72px] w-[72px] shrink-0 items-center justify-center overflow-hidden rounded-full"
+            style="background: var(--brand-50);"
+          >
+            <img v-if="hasCustomAvatar" :src="avatarUrl" alt="用户头像" class="h-full w-full object-cover" />
+            <span v-else class="text-[28px] font-semibold" style="color: var(--brand-500);">{{ userInitial }}</span>
           </div>
-        </v-form>
-      </ClinicalSurfaceCard>
+          <div class="min-w-0 flex-1">
+            <p class="text-[17px] font-semibold" style="color: var(--foreground);">{{ userName }}</p>
+            <p class="mt-0.5 truncate text-[14px]" style="color: var(--muted-foreground);">{{ userEmail || '未绑定邮箱' }}</p>
+          </div>
+          <button
+            type="button"
+            class="flex h-9 items-center gap-1 rounded-full px-4 text-[13px] font-medium transition active:scale-95"
+            style="background: var(--secondary); color: var(--foreground);"
+            @click="triggerAvatar"
+          >
+            <iconify-icon icon="solar:camera-outline" width="16" height="16" />
+            更换
+          </button>
+        </div>
+        <input ref="avatarInput" class="hidden" type="file" accept="image/*" @change="onAvatarChange" />
+      </section>
 
-      <ClinicalSurfaceCard eyebrow="健康目标" title="近期关注" description="这些目标会影响后续建议重点。">
-        <label class="block">
-          <span class="text-xs text-slate-500">近期关注</span>
-          <textarea
-            v-model="form.focus"
-            rows="5"
-            class="mt-1 w-full resize-none rounded-[1rem] border border-[color:var(--surface-border)] px-3 py-2.5 text-sm outline-none focus:border-[color:var(--ring)]"
-            placeholder="例如：改善久坐带来的腰背不适"
-          />
-        </label>
+      <!-- 基础信息 -->
+      <section
+        class="rounded-[19.2px] border p-[18px]"
+        style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
+      >
+        <h2 class="text-[17px] font-semibold" style="color: var(--foreground);">基础信息</h2>
+        <div class="mt-4 space-y-4">
+          <label class="block">
+            <span class="text-[13px]" style="color: var(--muted-foreground);">昵称</span>
+            <input
+              v-model="form.name"
+              type="text"
+              class="mt-1.5 h-12 w-full rounded-[12px] border px-4 text-[15px] outline-none transition focus:ring-2 focus:ring-[color:var(--ring)]"
+              style="background: var(--secondary); border-color: var(--border); color: var(--foreground);"
+              placeholder="请输入昵称"
+            />
+          </label>
+          <label class="block">
+            <span class="text-[13px]" style="color: var(--muted-foreground);">邮箱</span>
+            <input
+              v-model="form.email"
+              type="email"
+              disabled
+              class="mt-1.5 h-12 w-full rounded-[12px] border px-4 text-[15px] outline-none"
+              style="background: var(--background-100); border-color: var(--border); color: var(--muted-foreground);"
+            />
+          </label>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block">
+              <span class="text-[13px]" style="color: var(--muted-foreground);">年龄</span>
+              <input
+                v-model.number="form.age"
+                type="number"
+                min="1"
+                class="mt-1.5 h-12 w-full rounded-[12px] border px-4 text-[15px] outline-none transition focus:ring-2 focus:ring-[color:var(--ring)]"
+                style="background: var(--secondary); border-color: var(--border); color: var(--foreground);"
+              />
+            </label>
+            <label class="block">
+              <span class="text-[13px]" style="color: var(--muted-foreground);">性别</span>
+              <select
+                v-model="form.gender"
+                class="mt-1.5 h-12 w-full rounded-[12px] border px-4 text-[15px] outline-none transition focus:ring-2 focus:ring-[color:var(--ring)]"
+                style="background: var(--secondary); border-color: var(--border); color: var(--foreground);"
+              >
+                <option value="male">男</option>
+                <option value="female">女</option>
+                <option value="other">其他</option>
+              </select>
+            </label>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block">
+              <span class="text-[13px]" style="color: var(--muted-foreground);">身高 (cm)</span>
+              <input
+                v-model.number="form.height"
+                type="number"
+                min="80"
+                class="mt-1.5 h-12 w-full rounded-[12px] border px-4 text-[15px] outline-none transition focus:ring-2 focus:ring-[color:var(--ring)]"
+                style="background: var(--secondary); border-color: var(--border); color: var(--foreground);"
+              />
+            </label>
+            <label class="block">
+              <span class="text-[13px]" style="color: var(--muted-foreground);">体重 (kg)</span>
+              <input
+                v-model.number="form.weight"
+                type="number"
+                min="30"
+                class="mt-1.5 h-12 w-full rounded-[12px] border px-4 text-[15px] outline-none transition focus:ring-2 focus:ring-[color:var(--ring)]"
+                style="background: var(--secondary); border-color: var(--border); color: var(--foreground);"
+              />
+            </label>
+          </div>
+        </div>
+      </section>
 
-        <div class="mt-4 flex flex-wrap gap-2">
+      <!-- 健康目标 -->
+      <section
+        class="rounded-[19.2px] border p-[18px]"
+        style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
+      >
+        <h2 class="text-[17px] font-semibold" style="color: var(--foreground);">健康目标</h2>
+        <textarea
+          v-model="form.focus"
+          rows="3"
+          class="mt-3 w-full resize-none rounded-[12px] border p-3 text-[15px] outline-none transition focus:ring-2 focus:ring-[color:var(--ring)]"
+          style="background: var(--secondary); border-color: var(--border); color: var(--foreground);"
+          placeholder="例如：改善久坐带来的腰背不适"
+        />
+        <div class="mt-3 flex flex-wrap gap-2">
           <button
             v-for="tag in goalOptions"
             :key="tag"
             type="button"
-            class="rounded-full border px-3 py-1.5 text-xs transition"
-            :class="
-              selectedGoals.has(tag)
-                ? 'border-teal-300 bg-teal-50 text-teal-900'
-                : 'border-[color:var(--surface-border)] bg-white text-slate-600 hover:text-slate-900'
-            "
+            class="rounded-full px-3 py-1.5 text-[13px] font-medium transition active:scale-95"
+            :style="selectedGoals.has(tag)
+              ? { background: 'var(--brand-500)', color: 'var(--primary-foreground)' }
+              : { background: 'var(--secondary)', color: 'var(--foreground)', border: '1px solid var(--border)' }"
             @click="toggleGoal(tag)"
           >
             {{ tag }}
           </button>
         </div>
+      </section>
 
-        <p class="mt-4 rounded-[1.2rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-3 text-sm leading-6 text-slate-600">
-          目标越明确，系统越能把监测、上传和康复建议串成完整闭环。
-        </p>
-      </ClinicalSurfaceCard>
-    </div>
-
-    <ClinicalSurfaceCard eyebrow="提醒规则" title="提醒偏好" description="按你的使用节奏控制提醒频率。">
-      <div class="grid gap-3 lg:grid-cols-3">
-        <div class="flex items-center justify-between rounded-[1.2rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-3">
-          <div>
-            <p class="text-sm font-semibold text-slate-950">每日摘要</p>
-            <p class="mt-1 text-xs text-slate-500">每天晚间推送完成度和趋势变化</p>
-          </div>
-          <v-switch
-            v-model="form.dailySummary"
-            color="primary"
-            hide-details
-            density="compact"
-            inset
-          />
+      <!-- 通知偏好 -->
+      <section
+        class="rounded-[19.2px] border p-[18px]"
+        style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-xs);"
+      >
+        <h2 class="text-[17px] font-semibold" style="color: var(--foreground);">通知偏好</h2>
+        <div class="mt-3 space-y-2">
+          <label
+            v-for="item in reminderOptions"
+            :key="item.key"
+            class="flex items-center justify-between rounded-[12px] border px-4 py-3"
+            style="background: var(--secondary); border-color: var(--border);"
+          >
+            <div>
+              <p class="text-[15px] font-medium" style="color: var(--foreground);">{{ item.label }}</p>
+              <p class="mt-0.5 text-[12px]" style="color: var(--muted-foreground);">{{ item.desc }}</p>
+            </div>
+            <input
+              v-model="form[item.key as keyof SettingsForm]"
+              type="checkbox"
+              class="h-5 w-5 accent-[color:var(--brand-500)]"
+            />
+          </label>
         </div>
+      </section>
 
-        <div class="flex items-center justify-between rounded-[1.2rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-3">
-          <div>
-            <p class="text-sm font-semibold text-slate-950">异常提醒</p>
-            <p class="mt-1 text-xs text-slate-500">出现异常波动时及时提醒</p>
-          </div>
-          <v-switch
-            v-model="form.riskAlert"
-            color="primary"
-            hide-details
-            density="compact"
-            inset
-          />
-        </div>
-
-        <div class="flex items-center justify-between rounded-[1.2rem] border border-[color:var(--surface-border)] bg-[color:var(--surface-secondary)] px-4 py-3">
-          <div>
-            <p class="text-sm font-semibold text-slate-950">康复提醒</p>
-            <p class="mt-1 text-xs text-slate-500">按训练节奏提醒动作执行</p>
-          </div>
-          <v-switch
-            v-model="form.rehabReminder"
-            color="primary"
-            hide-details
-            density="compact"
-            inset
-          />
-        </div>
+      <!-- 操作按钮 -->
+      <div class="flex gap-3 pt-2">
+        <button
+          type="button"
+          class="flex h-[48px] flex-1 items-center justify-center rounded-full text-[15px] font-medium transition active:scale-[0.98]"
+          style="background: var(--secondary); color: var(--foreground);"
+          :disabled="saving"
+          @click="handleReset"
+        >
+          重置
+        </button>
+        <button
+          type="submit"
+          class="flex h-[48px] flex-1 items-center justify-center rounded-full text-[15px] font-semibold transition active:scale-[0.98] disabled:opacity-60"
+          style="background: var(--primary); color: var(--primary-foreground);"
+          :disabled="saving"
+        >
+          {{ saving ? '保存中…' : '保存' }}
+        </button>
       </div>
-    </ClinicalSurfaceCard>
-
-    <div class="grid grid-cols-2 gap-2.5">
-      <v-btn
-        variant="outlined"
-        color="grey-darken-1"
-        :disabled="saving"
-        rounded="lg"
-        @click="handleReset"
-      >
-        恢复上次保存
-      </v-btn>
-      <v-btn
-        color="primary"
-        :loading="saving"
-        rounded="lg"
-        @click="handleSave"
-      >
-        保存设置
-      </v-btn>
-    </div>
-  </div>
+    </form>
+  </ProfileSubPage>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { getProfileSettings, saveProfileSettings } from '@/api/modules/profile'
+import { getProfileSettings, saveProfileSettings, updateProfileAvatar } from '@/api/modules/profile'
 import { useToast } from '@/composables/useToast'
-import ClinicalPageHeader from '@/shared/components/clinical/ClinicalPageHeader.vue'
-import ClinicalStatCard from '@/shared/components/clinical/ClinicalStatCard.vue'
-import ClinicalSurfaceCard from '@/shared/components/clinical/ClinicalSurfaceCard.vue'
-import Button from '@/shared/components/ui/Button.vue'
 import { useAuthStore } from '@/stores/auth'
+import ProfileSubPage from '../components/ProfileSubPage.vue'
 
 type SettingsForm = {
   name: string
@@ -222,7 +206,12 @@ type SettingsForm = {
   rehabReminder: boolean
 }
 
-const router = useRouter()
+type ReminderOption = {
+  key: 'dailySummary' | 'riskAlert' | 'rehabReminder'
+  label: string
+  desc: string
+}
+
 const { success, warning, info } = useToast()
 const authStore = useAuthStore()
 
@@ -240,32 +229,57 @@ const form = reactive<SettingsForm>({
 })
 
 const goalOptions = ['姿势改善', '睡眠修复', '心率稳定', '减压恢复', '体重管理']
-const genderOptions: { label: string; value: SettingsForm['gender'] }[] = [
-  { label: '男', value: 'male' },
-  { label: '女', value: 'female' },
-  { label: '其他', value: 'other' },
+const reminderOptions: ReminderOption[] = [
+  { key: 'dailySummary', label: '每日摘要', desc: '每天晚间推送完成度和趋势变化' },
+  { key: 'riskAlert', label: '异常提醒', desc: '出现异常波动时及时通知' },
+  { key: 'rehabReminder', label: '康复提醒', desc: '按训练节奏提醒动作执行' },
 ]
 
 const selectedGoals = ref(new Set<string>())
 const snapshot = ref('')
 const saving = ref(false)
 
-const enabledReminderCount = computed(() => [form.dailySummary, form.riskAlert, form.rehabReminder].filter(Boolean).length)
-const genderLabel = computed(() => {
-  if (form.gender === 'female') return '女'
-  if (form.gender === 'other') return '其他'
-  return '男'
+const avatarUrl = computed(() => authStore.avatarUrl)
+const userName = computed(() => authStore.userName)
+const userEmail = computed(() => authStore.user?.email ?? '')
+const hasCustomAvatar = computed(() => {
+  const url = authStore.user?.avatarUrl
+  return Boolean(url) && !url!.startsWith('data:image/svg+xml')
+})
+const userInitial = computed(() => {
+  const name = authStore.user?.name ?? ''
+  return name.charAt(0) || '我'
 })
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+const avatarInput = ref<HTMLInputElement | null>(null)
+const triggerAvatar = () => avatarInput.value?.click()
 
-const goBack = () => {
-  if (window.history.length > 1) {
-    router.back()
+const onAvatarChange = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (!file.type.startsWith('image/')) {
+    warning('文件类型不支持', '请选择图片文件。')
+    input.value = ''
     return
   }
-  router.push('/profile')
+  const reader = new FileReader()
+  reader.onload = async () => {
+    const result = typeof reader.result === 'string' ? reader.result : ''
+    if (!result) return
+    try {
+      await updateProfileAvatar(result)
+      authStore.updateAvatar(result)
+      success('头像已更新')
+    } catch (err) {
+      warning('头像更新失败', err instanceof Error ? err.message : '请稍后重试')
+    }
+  }
+  reader.readAsDataURL(file)
+  input.value = ''
 }
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const toggleGoal = (tag: string) => {
   const next = new Set(selectedGoals.value)
@@ -293,25 +307,20 @@ const handleReset = () => {
   const parsed = JSON.parse(snapshot.value) as { form: SettingsForm; goals: string[] }
   Object.assign(form, parsed.form)
   selectedGoals.value = new Set(parsed.goals)
-  info('已恢复到上次保存', '你可以继续调整后再保存。')
+  info('已恢复', '你可以继续调整后再保存。')
 }
 
 const handleSave = async () => {
   saving.value = true
   await sleep(260)
-
-  const payload = {
-    ...form,
-    goals: Array.from(selectedGoals.value),
-  }
-
+  const payload = { ...form, goals: Array.from(selectedGoals.value) }
   try {
     const saved = await saveProfileSettings(payload)
     Object.assign(form, saved)
     selectedGoals.value = new Set(saved.goals)
     authStore.updateProfile({ name: saved.name, email: saved.email })
     snapshot.value = buildSnapshot()
-    success('设置已保存', '新的偏好会在后续建议中生效。')
+    success('设置已保存')
   } catch (err) {
     warning('保存失败', err instanceof Error ? err.message : '请稍后重试')
   } finally {

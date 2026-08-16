@@ -39,6 +39,7 @@
             type="button"
             class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-[color:var(--accent-soft)] hover:text-[color:var(--accent-strong)]"
             :disabled="syncingId === item.id"
+            aria-label="同步设备数据"
             @click="$emit('sync-device', item.id)"
           >
             <RefreshCw class="h-3.5 w-3.5" :class="{ 'animate-spin': syncingId === item.id }" />
@@ -46,6 +47,7 @@
           <button
             type="button"
             class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-500"
+            aria-label="删除设备"
             @click="$emit('remove-device', item.id)"
           >
             <Trash2 class="h-3.5 w-3.5" />

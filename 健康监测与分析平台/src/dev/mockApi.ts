@@ -1,4 +1,4 @@
-﻿import { computed, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { env } from '@/config/env'
 import { createMockDb, type MockDb } from './mockData'
 
@@ -56,12 +56,15 @@ export async function mockDelay(ms = 180): Promise<void> {
 export async function withMockFallback<T>(
   remoteExecutor: () => Promise<T>,
   mockExecutor: () => T | Promise<T>,
+  _fallbackOnError = false,
 ): Promise<T> {
+  // Mock data is an explicit development mode only. The legacy third argument
+  // is retained for call-site compatibility, but production failures must be
+  // surfaced instead of being silently replaced with plausible-looking data.
   if (env.useDevMock) {
     fallbackActivated.value = true
     await mockDelay()
     return mockExecutor()
   }
-
   return await remoteExecutor()
 }

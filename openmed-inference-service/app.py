@@ -1,23 +1,30 @@
 """
 OpenMed Local Inference Service
 Loads Chinese Medical NER and PII models locally and serves via HTTP.
+
+PII 模型支持切换：
+- 默认使用蒸馏后的 DistilBERT-chinese（小、快）
+- 设置环境变量 OPENMED_PII_USE_TEACHER=true 切回 OpenMed-PII teacher（Qwen 600M）
 """
+import os
+from typing import List, Optional
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional
 import uvicorn
 
-app = FastAPI(title="OpenMed Inference Service", version="1.1.0")
+app = FastAPI(title="OpenMed Inference Service", version="1.2.0")
 
 # Model pipelines - loaded on startup
 ner_pipeline = None
 pii_pipeline = None
+pii_model_kind = "unknown"  # "teacher" | "student"
+
 
 @app.on_event("startup")
 async def load_models():
-    global ner_pipeline, pii_pipeline
+    global ner_pipeline, pii_pipeline, pii_model_kind
     from transformers import pipeline
-    import os
 
     models_dir = os.path.join(os.path.dirname(__file__), "..", "backend-java", "models")
 
@@ -27,11 +34,31 @@ async def load_models():
     ner_pipeline = pipeline("token-classification", model=ner_path, aggregation_strategy="simple")
     print("Chinese Medical NER model loaded!")
 
-    # PII detection model for Chinese text
-    pii_path = os.path.join(models_dir, "OpenMed-PII-Chinese-QwenMed-XLarge-600M-v1")
-    print(f"Loading PII model from {pii_path}...")
+    # PII 检测：默认 student（蒸馏后 DistilBERT-chinese），可切回 teacher
+    use_teacher = os.getenv("OPENMED_PII_USE_TEACHER", "false").lower() == "true"
+    student_path = os.path.join(models_dir, "OpenMed-PII-DistilBERT-chinese")
+    teacher_path = os.path.join(models_dir, "OpenMed-PII-Chinese-QwenMed-XLarge-600M-v1")
+
+    if use_teacher:
+        if not os.path.isdir(teacher_path):
+            raise RuntimeError(
+                f"OPENMED_PII_USE_TEACHER=true 但 teacher 模型目录不存在: {teacher_path}"
+            )
+        pii_path = teacher_path
+        pii_model_kind = "teacher"
+    else:
+        if not os.path.isdir(student_path):
+            # student 未蒸馏时自动回退到 teacher
+            print(f"[WARN] student 模型目录不存在: {student_path}，回退到 teacher")
+            pii_path = teacher_path
+            pii_model_kind = "teacher"
+        else:
+            pii_path = student_path
+            pii_model_kind = "student"
+
+    print(f"Loading PII model ({pii_model_kind}) from {pii_path}...")
     pii_pipeline = pipeline("token-classification", model=pii_path, aggregation_strategy="simple")
-    print("PII model loaded!")
+    print(f"PII model ({pii_model_kind}) loaded!")
 
 
 class NERRequest(BaseModel):
@@ -107,7 +134,8 @@ async def health():
     return {
         "status": "UP",
         "ner_loaded": ner_pipeline is not None,
-        "pii_loaded": pii_pipeline is not None
+        "pii_loaded": pii_pipeline is not None,
+        "pii_model_kind": pii_model_kind,
     }
 
 

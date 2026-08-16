@@ -1,6 +1,5 @@
 import { http } from '@/api/http'
 import { env } from '@/config/env'
-import { getContextSnapshot } from '@/api/modules/context'
 
 export type ConsultScene = 'home_overview' | 'assistant'
 
@@ -14,6 +13,25 @@ export type ConsultResponse = {
   answer: string
   suggestions: string[]
   disclaimer: string
+  evidence: ConsultEvidence[]
+  safety: ConsultSafety
+}
+
+export type ConsultEvidence = {
+  id: string
+  title: string
+  sourceType: string
+  field: string
+  excerpt: string
+  retrievalScore: number | null
+}
+
+export type ConsultSafety = {
+  level: 'routine' | 'emergency' | string
+  flags: string[]
+  uncertainty: string
+  escalation: string
+  actionTags: string[]
 }
 
 export type ConsultHistoryItem = {
@@ -25,6 +43,8 @@ export type ConsultHistoryItem = {
   suggestions: string[]
   disclaimer: string
   knowledgeSources: string[]
+  evidence: ConsultEvidence[]
+  safety: ConsultSafety | null
   modelUsed: string
   createdAt: string
 }
@@ -44,13 +64,37 @@ function readToken() {
 }
 
 export async function askConsultQuestion(payload: ConsultQuestionPayload): Promise<ConsultResponse> {
-  if (env.llmApiKey) {
-    return callLLMDirectAPI(payload)
+  if (env.useDevMock) {
+    return {
+      requestId: 'mock-req-' + Date.now(),
+      answer: `这是一个模拟回复。您的问题：${payload.question}\n\n根据您的健康数据，建议您保持规律的运动和充足的睡眠。如有具体不适，请及时就医。`,
+      suggestions: ['如何改善睡眠质量？', '推荐适合的运动方式', '日常饮食注意事项'],
+      disclaimer: '此为模拟回复，仅供参考，不构成医疗建议。',
+      evidence: [{
+        id: 'mock-health-context',
+        title: '模拟健康管理上下文',
+        sourceType: 'demo',
+        field: '',
+        excerpt: '开发模式下不使用真实知识库，正式展示请切换至后端可追溯链路。',
+        retrievalScore: null,
+      }],
+      safety: {
+        level: 'routine',
+        flags: ['DEMO_MODE'],
+        uncertainty: '当前为开发模拟结果。',
+        escalation: '如有不适或用药疑问，请联系医生或药师。',
+        actionTags: ['REASSESS_BEFORE_PROGRESSION'],
+      },
+    }
   }
   const { data } = await http.post<ConsultResponse>('/consult/questions', payload, { timeout: 90_000 })
   return data
 }
 
+/*
+ * Legacy direct-browser LLM implementation intentionally disabled.
+ * Consult requests must use the authenticated backend path so that PII scrubbing,
+ * knowledge retrieval, safety assessment, and audit persistence cannot be bypassed.
 async function callLLMDirectAPI(payload: ConsultQuestionPayload): Promise<ConsultResponse> {
   let contextBlock = ''
   try {
@@ -84,7 +128,6 @@ async function callLLMDirectAPI(payload: ConsultQuestionPayload): Promise<Consul
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + env.llmApiKey,
       },
       body,
     })
@@ -99,6 +142,8 @@ async function callLLMDirectAPI(payload: ConsultQuestionPayload): Promise<Consul
       answer,
       suggestions: extractSuggestions(answer),
       disclaimer: 'This content is for health management assistance only and does not replace medical diagnosis or treatment.',
+      evidence: [],
+      safety: defaultSafety(),
     }
   } catch {
     return {
@@ -106,6 +151,8 @@ async function callLLMDirectAPI(payload: ConsultQuestionPayload): Promise<Consul
       answer: 'The system will generate specific recommendations based on your latest monitoring report. Please complete health data sync first.',
       suggestions: ['Complete Apple Health sync', 'Upload recent health report', 'View health score trends'],
       disclaimer: 'This content is for health management assistance only.',
+      evidence: [],
+      safety: defaultSafety(),
     }
   }
 }
@@ -131,6 +178,8 @@ function extractSuggestions(text: string): string[] {
   ]
 }
 
+*/
+
 /**
  * SSE streaming via GET endpoint. Yields text chunks as they arrive.
  * The final "done" event carries metadata (requestId, suggestions, disclaimer).
@@ -138,7 +187,7 @@ function extractSuggestions(text: string): string[] {
 export async function* streamConsultSSE(
   question: string,
   scene = 'assistant',
-): AsyncGenerator<{ chunk?: string; done?: { requestId: string; suggestions: string[]; disclaimer: string } }> {
+): AsyncGenerator<{ chunk?: string; done?: Omit<ConsultResponse, 'answer'> }> {
   const token = readToken()
   const headers: Record<string, string> = {}
   if (token) headers['Authorization'] = 'Bearer ' + token
@@ -171,7 +220,15 @@ export async function* streamConsultSSE(
         try {
           const meta = JSON.parse(payload)
           if (meta.requestId) {
-            yield { done: { requestId: meta.requestId, suggestions: meta.suggestions ?? [], disclaimer: meta.disclaimer ?? '' } }
+            yield {
+              done: {
+                requestId: meta.requestId,
+                suggestions: meta.suggestions ?? [],
+                disclaimer: meta.disclaimer ?? '',
+                evidence: meta.evidence ?? [],
+                safety: meta.safety ?? defaultSafety(),
+              },
+            }
             continue
           }
         } catch {
@@ -187,16 +244,6 @@ export async function streamConsultQuestion(
   payload: ConsultQuestionPayload,
   handlers: { onChunk?: (delta: string) => void; onComplete?: (response: ConsultResponse) => void },
 ): Promise<void> {
-  if (env.llmApiKey) {
-    const result = await callLLMDirectAPI(payload)
-    for (let i = 0; i < result.answer.length; i += 3) {
-      handlers.onChunk?.(result.answer.slice(i, i + 3))
-      await new Promise(r => setTimeout(r, 15))
-    }
-    handlers.onComplete?.(result)
-    return
-  }
-
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   const token = readToken()
   if (token) headers.Authorization = 'Bearer ' + token
@@ -225,6 +272,7 @@ export async function streamConsultQuestion(
       if (event.type === 'complete') handlers.onComplete?.({
         requestId: event.requestId, answer: event.answer,
         suggestions: event.suggestions, disclaimer: event.disclaimer,
+        evidence: event.evidence ?? [], safety: event.safety ?? defaultSafety(),
       })
       if (event.type === 'error') throw new Error(event.message)
     }
@@ -232,6 +280,7 @@ export async function streamConsultQuestion(
 }
 
 export async function getConsultHistory(limit = 20, offset = 0): Promise<ConsultHistoryItem[]> {
+  if (env.useDevMock) return []
   try {
     const { data } = await http.get(`/consult/history?limit=${limit}&offset=${offset}`)
     return (data as Record<string, unknown>[]).map(item => ({
@@ -240,9 +289,11 @@ export async function getConsultHistory(limit = 20, offset = 0): Promise<Consult
       scene: item.scene as string,
       question: item.question as string,
       answer: item.answer as string,
-      suggestions: typeof item.suggestions_json === 'string' ? JSON.parse(item.suggestions_json as string) : [],
+      suggestions: parseJsonArray<string>(item.suggestions_json),
       disclaimer: (item.disclaimer as string) ?? '',
-      knowledgeSources: typeof item.knowledge_sources_json === 'string' ? JSON.parse(item.knowledge_sources_json as string) : [],
+      knowledgeSources: parseJsonArray<string>(item.knowledge_sources_json),
+      evidence: parseJsonArray<ConsultEvidence>(item.evidence_json),
+      safety: parseSafety(item.safety_json),
       modelUsed: (item.model_used as string) ?? '',
       createdAt: item.created_at as string,
     }))
@@ -250,9 +301,49 @@ export async function getConsultHistory(limit = 20, offset = 0): Promise<Consult
 }
 
 export async function deleteConsultHistory(id: number): Promise<void> {
+  if (env.useDevMock) return
   await http.delete(`/consult/history/${id}`)
 }
 
 export async function clearConsultHistory(): Promise<void> {
+  if (env.useDevMock) return
   await http.delete('/consult/history')
+}
+
+function parseJsonArray<T>(value: unknown): T[] {
+  if (typeof value !== 'string') return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed as T[] : []
+  } catch {
+    return []
+  }
+}
+
+function parseSafety(value: unknown): ConsultSafety | null {
+  if (typeof value !== 'string') return null
+  try {
+    const parsed = JSON.parse(value)
+    if (!parsed || typeof parsed !== 'object') return null
+    const safety = parsed as Partial<ConsultSafety>
+    return {
+      level: safety.level ?? 'routine',
+      flags: Array.isArray(safety.flags) ? safety.flags : [],
+      uncertainty: safety.uncertainty ?? '安全元数据暂不可用。',
+      escalation: safety.escalation ?? '如有不适或用药疑问，请联系医生或药师。',
+      actionTags: Array.isArray(safety.actionTags) ? safety.actionTags : [],
+    }
+  } catch {
+    return null
+  }
+}
+
+function defaultSafety(): ConsultSafety {
+  return {
+    level: 'routine',
+    flags: ['SAFETY_METADATA_UNAVAILABLE'],
+    uncertainty: '安全元数据暂不可用。',
+    escalation: '如有不适或用药疑问，请联系医生或药师。',
+    actionTags: ['NO_PERSONALIZED_GUIDANCE', 'REQUEST_MORE_EVIDENCE'],
+  }
 }

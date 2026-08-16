@@ -1,5 +1,7 @@
 package com.ahealth.backend.rehab;
 
+import java.util.List;
+import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -15,9 +17,14 @@ import com.ahealth.backend.common.CurrentUser;
 @RequestMapping("/api/rehab")
 public class RehabController {
   private final RehabService rehabService;
+  private final SmartRehabPlannerService smartRehabPlannerService;
+  private final RehabCaseService rehabCaseService;
 
-  public RehabController(RehabService rehabService) {
+  public RehabController(RehabService rehabService, SmartRehabPlannerService smartRehabPlannerService,
+      RehabCaseService rehabCaseService) {
     this.rehabService = rehabService;
+    this.smartRehabPlannerService = smartRehabPlannerService;
+    this.rehabCaseService = rehabCaseService;
   }
 
   @GetMapping("/plan")
@@ -78,5 +85,31 @@ public class RehabController {
   @GetMapping("/analysis")
   public RehabDtos.RehabPerformanceAnalysis analyzePerformance() {
     return rehabService.analyzeRehabPerformance(CurrentUser.requireUserId());
+  }
+
+  /** 智能康复计划：根据身高/体重/年龄/性别/目标生成 BMR/TDEE + 推荐动作。 */
+  @PostMapping("/smart-plan")
+  public RehabDtos.SmartPlanResponse smartPlan(@RequestBody RehabDtos.SmartPlanRequest request) {
+    return smartRehabPlannerService.generatePlan(request);
+  }
+
+  @GetMapping("/case")
+  public RehabDtos.RehabCase currentCase() {
+    return rehabCaseService.buildCurrentCase();
+  }
+
+  /** 应用智能计划为今日计划。 */
+  @PostMapping("/smart-plan/apply")
+  public RehabDtos.RehabPlanResponse applySmartPlan(@RequestBody Map<String, List<Long>> body) {
+    long userId = CurrentUser.requireUserId();
+    List<Long> exerciseIds = body.getOrDefault("exerciseIds", List.of());
+    rehabService.applySmartPlan(userId, exerciseIds);
+    return rehabService.getPlan();
+  }
+
+  /** 查询当前用户身体指标（BMI/BMR/TDEE/目标热量）。 */
+  @GetMapping("/body-metrics")
+  public RehabDtos.BodyMetrics bodyMetrics() {
+    return rehabService.calculateBodyMetrics(CurrentUser.requireUserId());
   }
 }

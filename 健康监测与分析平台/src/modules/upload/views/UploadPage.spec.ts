@@ -111,15 +111,11 @@ describe('UploadPage', () => {
     mockWarning.mockReset()
   })
 
-  it('renders the feature nav bar and returns to home', async () => {
-    const { router } = await renderPage()
+  it('renders the upload analysis page entry point', async () => {
+    await renderPage()
 
-    expect(screen.getByRole('navigation', { name: '功能页导航' })).toBeInTheDocument()
-    expect(screen.getAllByText('上传分析').length).toBeGreaterThan(0)
-
-    await fireEvent.click(screen.getByRole('button', { name: '返回' }))
-
-    await waitFor(() => expect(router.currentRoute.value.fullPath).toBe('/home'))
+    expect(screen.getByRole('heading', { name: '上传分析' })).toBeInTheDocument()
+    expect(screen.getByText('上传健康资料，AI 自动生成分析报告')).toBeInTheDocument()
   })
 
   it('uses custom file picker instead of native choose file text', async () => {

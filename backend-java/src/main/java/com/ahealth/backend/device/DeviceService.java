@@ -11,6 +11,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * @deprecated 已被 {@link com.ahealth.backend.device.core.DeviceAggregationService} 取代。
+ *             仅供 {@link DeviceController}（/api/devices/legacy）使用以保持向后兼容。
+ */
+@Deprecated
 @Service
 public class DeviceService {
   private final JdbcTemplate jdbcTemplate;
@@ -79,7 +84,9 @@ public class DeviceService {
     long userId = CurrentUser.requireUserId();
     Map<String, Object> row = findRow(userId, id);
     int battery = row.get("battery") instanceof Number number ? number.intValue() : 100;
-    int nextBattery = Math.max(12, Math.min(100, battery - (int) (Math.random() * 4)));
+    // Battery is device telemetry, not a sync-side simulation. Preserve the last
+    // reported value until the provider sends a fresh battery reading.
+    int nextBattery = Math.max(0, Math.min(100, battery));
     jdbcTemplate.update(
         """
         UPDATE devices

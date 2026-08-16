@@ -1,0 +1,18 @@
+# 药品识别数据集（蒸馏用）
+# 基于本地 medical-pills 扩展，类别与 teacher .pt 的 result.names 对齐
+# 实际部署时如 teacher 为 COCO 80 类，可改为 coco128.yaml 跑通 pipeline
+
+path: ../datasets/medical-pills  # dataset root dir
+train: train/images  # train images (relative to 'path')
+val: valid/images    # val images (relative to 'path')
+test:                # test images (optional)
+
+# Classes - 与 local_medication_api 的实际部署类别对齐
+# 如 teacher .pt 为 COCO 80 类，改为：
+# names:
+#   0: person
+#   1: bicycle
+#   ...
+# 当前默认 1 类 pill（与 medical-pills.yaml 一致）
+names:
+  0: pill

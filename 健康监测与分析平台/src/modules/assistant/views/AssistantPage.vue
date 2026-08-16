@@ -74,6 +74,27 @@
                 <span>参考：</span>
                 <span v-for="(src, i) in message.knowledgeSources" :key="i">{{ src }}{{ i < message.knowledgeSources.length - 1 ? '、' : '' }}</span>
               </div>
+              <section v-if="message.evidence?.length" class="mt-3 rounded-xl border border-sky-100 bg-sky-50/70 p-2.5 text-xs text-slate-600">
+                <p class="font-semibold text-sky-800">知识证据</p>
+                <div v-for="item in message.evidence" :key="item.id" class="mt-1.5 border-t border-sky-100 pt-1.5 first:border-t-0 first:pt-0">
+                  <p class="font-medium text-slate-700">{{ item.title }}</p>
+                  <p class="mt-0.5 leading-5">{{ item.excerpt }}</p>
+                </div>
+              </section>
+              <section v-if="message.safety" class="mt-3 rounded-xl border p-2.5 text-xs" :class="message.safety.level === 'emergency' ? 'border-red-200 bg-red-50 text-red-800' : 'border-amber-100 bg-amber-50/70 text-amber-800'">
+                <p class="font-semibold">{{ message.safety.level === 'emergency' ? '紧急风险提示' : '回答边界与就医提示' }}</p>
+                <p class="mt-1 leading-5">{{ message.safety.uncertainty }}</p>
+                <p class="mt-1 leading-5">{{ message.safety.escalation }}</p>
+                <div v-if="message.safety.actionTags?.length" class="mt-2 flex flex-wrap gap-1.5">
+                  <span
+                    v-for="tag in message.safety.actionTags"
+                    :key="tag"
+                    class="rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-medium"
+                  >
+                    {{ tag }}
+                  </span>
+                </div>
+              </section>
               <div v-if="message.suggestions?.length" class="mt-3 flex flex-wrap gap-2">
                 <button
                   v-for="suggestion in message.suggestions"
@@ -178,7 +199,7 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { streamConsultSSE, streamConsultQuestion, getConsultHistory, deleteConsultHistory, clearConsultHistory, type ConsultHistoryItem } from '@/api/modules/consult'
+import { streamConsultSSE, streamConsultQuestion, getConsultHistory, deleteConsultHistory, clearConsultHistory, type ConsultEvidence, type ConsultHistoryItem, type ConsultSafety } from '@/api/modules/consult'
 import { assistantPresetQuestions } from '@/modules/assistant/presets'
 
 type AssistantMessage = {
@@ -187,6 +208,8 @@ type AssistantMessage = {
   content: string
   suggestions?: string[]
   knowledgeSources?: string[]
+  evidence?: ConsultEvidence[]
+  safety?: ConsultSafety | null
 }
 
 const STORAGE_KEY = 'hm_assistant_history'
@@ -215,6 +238,8 @@ function loadHistoryQuestion(item: ConsultHistoryItem) {
     content: item.answer,
     suggestions: item.suggestions,
     knowledgeSources: item.knowledgeSources,
+    evidence: item.evidence,
+    safety: item.safety,
   })
   showHistory.value = false
   void scrollMessagesToBottom()
@@ -279,7 +304,12 @@ function renderMarkdown(text: string): string {
 
 function persistMessages() {
   if (typeof window === 'undefined') return
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(messages.value.slice(-30)))
+  // 过滤掉 content 为空的 assistant 消息（未完成的 pending message），
+  // 否则退出后再进入会一直显示"正在生成回答..."
+  const toSave = messages.value.filter(
+    (m) => m.role === 'user' || (m.content && m.content.trim().length > 0),
+  )
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave.slice(-30)))
 }
 
 function loadMessages() {
@@ -296,7 +326,11 @@ function loadMessages() {
 
   try {
     const parsed = JSON.parse(raw) as AssistantMessage[]
-    messages.value = Array.isArray(parsed) && parsed.length ? parsed : createWelcomeMessages()
+    // 二次清理：过滤掉 content 为空的 assistant 消息（旧数据可能已存入）
+    const cleaned = Array.isArray(parsed)
+      ? parsed.filter((m) => m.role === 'user' || (m.content && m.content.trim().length > 0))
+      : []
+    messages.value = cleaned.length ? cleaned : createWelcomeMessages()
   } catch {
     messages.value = createWelcomeMessages()
   }
@@ -352,6 +386,8 @@ async function submitQuestion(question: string) {
         if (event.done) {
           pendingMessage.id = event.done.requestId
           pendingMessage.suggestions = event.done.suggestions
+          pendingMessage.evidence = event.done.evidence
+          pendingMessage.safety = event.done.safety
         }
       }
     } catch {
@@ -371,6 +407,8 @@ async function submitQuestion(question: string) {
             pendingMessage.id = response.requestId
             pendingMessage.content = response.answer || pendingMessage.content
             pendingMessage.suggestions = response.suggestions
+            pendingMessage.evidence = response.evidence
+            pendingMessage.safety = response.safety
           },
         },
       )

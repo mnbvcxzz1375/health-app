@@ -227,20 +227,20 @@ public class RookService {
 
     // Insert or update today's record
     Integer existing = jdbc.queryForObject(
-        "SELECT COUNT(*) FROM monitor_records WHERE DATE(recorded_at) = CURDATE() AND HOUR(recorded_at) = HOUR(NOW())",
-        Integer.class);
+        "SELECT COUNT(*) FROM monitor_records WHERE user_id=? AND DATE(recorded_at) = CURDATE() AND HOUR(recorded_at) = HOUR(NOW())",
+        Integer.class, uid);
 
     if (existing != null && existing > 0) {
       jdbc.update(
           "UPDATE monitor_records SET hr=?, sleep_score=?, deep_sleep_hours=?, awake_times=?, "
           + "stress_score=?, hrv_millis=?, steps=?, vo2_max=? "
-          + "WHERE DATE(recorded_at)=CURDATE() AND HOUR(recorded_at)=HOUR(NOW())",
-          hr, sleepScore, deepHours, awakeTimes, stressScore, hrv, steps, vo2);
+          + "WHERE user_id=? AND DATE(recorded_at)=CURDATE() AND HOUR(recorded_at)=HOUR(NOW())",
+          hr, sleepScore, deepHours, awakeTimes, stressScore, hrv, steps, vo2, uid);
     } else {
       jdbc.update(
-          "INSERT INTO monitor_records(recorded_at, hr, sleep_score, deep_sleep_hours, awake_times, "
-          + "stress_score, hrv_millis, steps, vo2_max) VALUES(NOW(), ?, ?, ?, ?, ?, ?, ?, ?)",
-          hr, sleepScore, deepHours, awakeTimes, stressScore, hrv, steps, vo2);
+          "INSERT INTO monitor_records(user_id, recorded_at, hr, sleep_score, deep_sleep_hours, awake_times, "
+          + "stress_score, hrv_millis, steps, vo2_max) VALUES(?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?)",
+          uid, hr, sleepScore, deepHours, awakeTimes, stressScore, hrv, steps, vo2);
     }
 
     return Map.of(

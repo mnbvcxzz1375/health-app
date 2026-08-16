@@ -15,16 +15,17 @@
       <div class="grid grid-cols-[max-content_minmax(0,1fr)_max-content] items-center gap-2">
         <button
           type="button"
-          class="inline-flex min-h-10 items-center gap-1.5 text-sm font-medium text-slate-700 transition hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)] focus-visible:ring-offset-2"
+          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition active:scale-95"
+          style="background: var(--secondary); color: var(--foreground);"
+          aria-label="返回"
           @click="goBack"
         >
-        <iconify-icon icon="solar:alt-arrow-left-outline" width="16" height="16" />
-        {{ backLabel }}
+          <iconify-icon icon="solar:alt-arrow-left-outline" width="20" height="20" />
         </button>
 
-        <p class="truncate px-2 text-center text-xl font-semibold text-slate-950 lg:text-base">{{ title }}</p>
+        <p class="truncate px-2 text-center text-[17px] font-semibold" style="color: var(--foreground);">{{ title }}</p>
 
-        <div data-testid="feature-nav-spacer" aria-hidden="true" class="h-10 w-[72px] shrink-0" />
+        <div data-testid="feature-nav-spacer" aria-hidden="true" class="h-9 w-9 shrink-0" />
       </div>
     </nav>
   </div>
@@ -41,7 +42,7 @@ const props = withDefaults(
     contentWidth?: string
   }>(),
   {
-    backLabel: '返回',
+    backLabel: '',
     contentWidth: '100%',
   },
 )
@@ -49,6 +50,10 @@ const props = withDefaults(
 const router = useRouter()
 
 const goBack = () => {
-  void router.push(props.backTo)
+  if (window.history.length > 1) {
+    router.back()
+  } else {
+    void router.push(props.backTo)
+  }
 }
 </script>

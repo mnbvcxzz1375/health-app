@@ -253,7 +253,7 @@ describe('HomePage', () => {
 
     await renderPage()
 
-    expect(screen.getByText('正在加载总览')).toBeInTheDocument()
+    expect(document.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0)
 
     homeRequest.resolve(summaryFixture)
     rehabRequest.resolve(rehabFixture)
@@ -272,10 +272,9 @@ describe('HomePage', () => {
     await renderPage()
 
     await waitFor(() => expect(screen.getAllByRole('button', { name: '上传资料' }).length).toBeGreaterThan(0))
-    expect(screen.getByText('监测趋势')).toBeInTheDocument()
+    expect(screen.getByText('健康趋势')).toBeInTheDocument()
     expect(screen.getByText('已保存报告')).toBeInTheDocument()
     expect(screen.getByText('已保存 1 份分析报告')).toBeInTheDocument()
-    expect(screen.getByTestId('mock-chart')).toBeInTheDocument()
 
     await fireEvent.click(
       screen.getByRole('button', { name: /已保存 1 份分析报告.*展开后可查看最近结果。/ }),

@@ -30,7 +30,7 @@ public class UploadController {
   }
 
   @PostMapping("/tasks/custom-model")
-  public UploadDtos.AnalyzeTaskResponse createTaskByCustomModel(
+  public UploadDtos.CustomModelTaskResponse createTaskByCustomModel(
       @RequestParam(defaultValue = "text") String type,
       @RequestParam(defaultValue = "") String text,
       @RequestParam(value = "files", required = false) MultipartFile[] files

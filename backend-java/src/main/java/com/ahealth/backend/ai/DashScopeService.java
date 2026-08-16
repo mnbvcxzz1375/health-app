@@ -14,26 +14,36 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class DashScopeService {
+  private static final Logger log = LoggerFactory.getLogger(DashScopeService.class);
+
   private final ObjectMapper objectMapper;
   private final HttpClient httpClient;
   private final String apiKey;
   private final String baseUrl;
   private final String visionModel;
   private final String chatModel;
+  private final LlmCacheService llmCacheService;
+  private final int cacheTtlHours;
 
   public DashScopeService(
       ObjectMapper objectMapper,
       @Value("${DASHSCOPE_API_KEY:${QWEN_API_KEY:}}") String apiKey,
       @Value("${DASHSCOPE_BASE_URL:https://coding.dashscope.aliyuncs.com/v1}") String baseUrl,
       @Value("${DASHSCOPE_VISION_MODEL:kimi-k2.5}") String visionModel,
-      @Value("${DASHSCOPE_CHAT_MODEL:kimi-k2.5}") String chatModel
+      @Value("${DASHSCOPE_CHAT_MODEL:kimi-k2.5}") String chatModel,
+      @Lazy LlmCacheService llmCacheService,
+      @Value("${rag.cache.llm-ttl-hours:168}") int cacheTtlHours
   ) {
     this.objectMapper = objectMapper;
     this.apiKey = apiKey == null ? "" : apiKey.trim();
@@ -45,6 +55,8 @@ public class DashScopeService {
     this.httpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(20))
         .build();
+    this.llmCacheService = llmCacheService;
+    this.cacheTtlHours = cacheTtlHours;
   }
 
   public String chatModel() {
@@ -63,6 +75,79 @@ public class DashScopeService {
       throw new ApiException(HttpStatus.BAD_GATEWAY, featureName + "返回格式无效，未得到可解析的 JSON。");
     }
     return parsed;
+  }
+
+  /**
+   * 带缓存的 JSON 请求：先查精确缓存，再查语义缓存（低温度场景），最后调 LLM 并写缓存。
+   *
+   * @param scene        场景标识（consult / explain_medication / rehab_plan_draft ...）
+   * @param systemPrompt 系统提示词
+   * @param userContent  用户内容（String 或 List/Map）
+   * @param model        模型名
+   * @param temperature  温度（&lt;0.4 启用语义缓存）
+   * @param contextHash  上下文哈希（用于区分不同用户上下文的相同 prompt）
+   * @return LLM 返回的 JSON
+   */
+  public JsonNode requestJsonWithCache(
+      String scene, String systemPrompt, Object userContent,
+      String model, double temperature, String contextHash
+  ) {
+    String promptKey = systemPrompt + "|" + serialize(userContent);
+
+    // 1. 精确缓存
+    Optional<String> exact = llmCacheService.getExact(scene, promptKey, contextHash);
+    if (exact.isPresent()) {
+      log.debug("[DashScope] 缓存命中 scene={}", scene);
+      JsonNode parsed = extractJsonObject(exact.get());
+      if (parsed != null && !parsed.isMissingNode()) {
+        return parsed;
+      }
+    }
+
+    // 2. 语义缓存（仅低温度场景）
+    if (temperature < 0.4) {
+      Optional<String> semantic = llmCacheService.getSemantic(scene, promptKey);
+      if (semantic.isPresent()) {
+        log.debug("[DashScope] 语义缓存命中 scene={}", scene);
+        JsonNode parsed = extractJsonObject(semantic.get());
+        if (parsed != null && !parsed.isMissingNode()) {
+          return parsed;
+        }
+      }
+    }
+
+    // 3. 调 LLM
+    JsonNode response = requestChatCompletion(systemPrompt, userContent, model, temperature, false, "缓存场景:" + scene);
+    String text = extractAssistantText(response.path("choices").path(0).path("message").path("content"));
+    JsonNode parsed = extractJsonObject(text);
+    if (parsed == null || parsed.isMissingNode()) {
+      throw new ApiException(HttpStatus.BAD_GATEWAY, "缓存场景:" + scene + " 返回格式无效，未得到可解析的 JSON。");
+    }
+
+    // 4. 写缓存
+    try {
+      llmCacheService.put(
+          scene, promptKey, contextHash, text,
+          Duration.ofHours(cacheTtlHours), temperature < 0.4);
+    } catch (Exception e) {
+      log.warn("[DashScope] 写缓存失败 scene={}: {}", scene, e.getMessage());
+    }
+
+    return parsed;
+  }
+
+  /** 序列化 userContent 用于构造 promptKey。String 直返；List/Map 用 ObjectMapper。 */
+  private String serialize(Object userContent) {
+    if (userContent == null) return "";
+    if (userContent instanceof String s) return s;
+    if (userContent instanceof List<?> || userContent instanceof Map<?, ?>) {
+      try {
+        return objectMapper.writeValueAsString(userContent);
+      } catch (Exception e) {
+        return String.valueOf(userContent);
+      }
+    }
+    return String.valueOf(userContent);
   }
 
   public String requestText(String systemPrompt, Object userContent, String model, double temperature, String featureName) {

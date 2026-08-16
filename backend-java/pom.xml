@@ -20,6 +20,8 @@
     <java.version>17</java.version>
     <springdoc.version>2.8.9</springdoc.version>
     <testcontainers.version>1.20.4</testcontainers.version>
+    <langchain4j.version>0.36.2</langchain4j.version>
+    <lettucemod.version>4.3.0</lettucemod.version>
   </properties>
 
   <dependencies>
@@ -87,6 +89,40 @@
       <artifactId>mysql</artifactId>
       <version>${testcontainers.version}</version>
       <scope>test</scope>
+    </dependency>
+
+    <!-- ===== LLM 智能化升级依赖 ===== -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-redis</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.github.ben-manes.caffeine</groupId>
+      <artifactId>caffeine</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>dev.langchain4j</groupId>
+      <artifactId>langchain4j-spring-boot-starter</artifactId>
+      <version>${langchain4j.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>dev.langchain4j</groupId>
+      <artifactId>langchain4j-open-ai-spring-boot-starter</artifactId>
+      <version>${langchain4j.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>dev.langchain4j</groupId>
+      <artifactId>langchain4j-redis</artifactId>
+      <version>${langchain4j.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.redis</groupId>
+      <artifactId>lettucemod</artifactId>
+      <version>${lettucemod.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>redis.clients</groupId>
+      <artifactId>jedis</artifactId>
     </dependency>
   </dependencies>
 

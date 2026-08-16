@@ -1,0 +1,341 @@
+openapi: 3.0.3
+info:
+  title: 健康监测与分析平台 — 开放 SDK API
+  description: |
+    第三方设备/应用通过此 API 推送健康数据到平台。
+
+    ## 鉴权
+    所有数据推送端点需在 Header 中携带 `X-SDK-API-Key`。
+    API Key 通过 `/keys` 端点创建（需用户 Token 鉴权），明文仅返回一次。
+
+    ## 数据模型
+    核心数据模型为 `UnifiedHealthRecord`，涵盖 25+ 健康维度。
+    所有字段均为 nullable，按需填写即可。
+  version: 1.0.0
+  contact:
+    name: AHealth Team
+    email: dev@ahealth.local
+
+servers:
+  - url: http://localhost:3302/api/devices/sdk
+    description: 本地开发
+  - url: /api/devices/sdk
+    description: 生产环境（相对路径）
+
+paths:
+  /reading:
+    post:
+      summary: 推送单条健康数据
+      operationId: pushReading
+      tags: [Records]
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SdkReadingRequest'
+      responses:
+        '200':
+          description: 写入成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  provider:
+                    type: string
+                  sourceDevice:
+                    type: string
+                  recordedAt:
+                    type: string
+                    format: date-time
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /readings/batch:
+    post:
+      summary: 批量推送健康数据
+      operationId: pushReadingsBatch
+      tags: [Records]
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [readings]
+              properties:
+                readings:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/SdkReadingRequest'
+      responses:
+        '200':
+          description: 批量写入结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  count:
+                    type: integer
+                    description: 成功写入条数
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /keys:
+    post:
+      summary: 创建 SDK API Key
+      operationId: createKey
+      tags: [Key Management]
+      description: 需要用户 Token 鉴权（非 SDK Key）。明文 API Key 仅返回一次。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [appName]
+              properties:
+                appName:
+                  type: string
+                  description: 应用名称
+                contactEmail:
+                  type: string
+                  description: 联系邮箱
+      responses:
+        '200':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  apiKey:
+                    type: string
+                    description: 明文 API Key（仅此一次）
+                  appName:
+                    type: string
+                  createdAt:
+                    type: string
+                    format: date-time
+    get:
+      summary: 列出当前用户的 SDK Key
+      operationId: listKeys
+      tags: [Key Management]
+      responses:
+        '200':
+          description: Key 列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    appName:
+                      type: string
+                    keyPrefix:
+                      type: string
+                      description: Key 前缀（脱敏）
+                    enabled:
+                      type: boolean
+                    createdAt:
+                      type: string
+                      format: date-time
+                    lastUsedAt:
+                      type: string
+                      format: date-time
+                      nullable: true
+
+  /keys/{keyId}:
+    delete:
+      summary: 撤销指定 Key
+      operationId: revokeKey
+      tags: [Key Management]
+      parameters:
+        - name: keyId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 撤销成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+
+  /schema:
+    get:
+      summary: 获取 OpenAPI Spec
+      operationId: getSchema
+      tags: [Meta]
+      description: 返回本 OpenAPI 文档的 JSON 格式（动态生成）。
+      responses:
+        '200':
+          description: OpenAPI 3.0 JSON
+          content:
+            application/json:
+              schema:
+                type: object
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-SDK-API-Key
+      description: 通过 /keys 端点创建的 API Key
+
+  responses:
+    Unauthorized:
+      description: API Key 无效或已过期
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: invalid_api_key
+
+  schemas:
+    SdkReadingRequest:
+      type: object
+      required: [sourceDevice]
+      properties:
+        sourceDevice:
+          type: string
+          description: 来源设备名称
+        recordedAt:
+          type: string
+          format: date-time
+          description: 记录时间 ISO-8601（默认当前时间）
+        heartRateAvgBpm:
+          type: integer
+          nullable: true
+          description: 平均心率 bpm
+        heartRateRestingBpm:
+          type: integer
+          nullable: true
+          description: 静息心率 bpm
+        hrvMillis:
+          type: integer
+          nullable: true
+          description: 心率变异性 ms
+        steps:
+          type: integer
+          nullable: true
+          description: 步数
+        exerciseMinutes:
+          type: integer
+          nullable: true
+          description: 锻炼分钟
+        standHours:
+          type: integer
+          nullable: true
+          description: 站立小时
+        activeEnergyKcal:
+          type: integer
+          nullable: true
+          description: 活动能量 kcal
+        flightsClimbed:
+          type: integer
+          nullable: true
+          description: 爬楼层数
+        vo2Max:
+          type: number
+          format: double
+          nullable: true
+          description: 最大摄氧量
+        stressScore:
+          type: integer
+          nullable: true
+          description: 压力评分 0-100
+        weightKg:
+          type: number
+          format: double
+          nullable: true
+          description: 体重 kg
+        heightCm:
+          type: number
+          format: double
+          nullable: true
+          description: 身高 cm
+        bmi:
+          type: number
+          format: double
+          nullable: true
+          description: BMI
+        systolicBp:
+          type: integer
+          nullable: true
+          description: 收缩压 mmHg
+        diastolicBp:
+          type: integer
+          nullable: true
+          description: 舒张压 mmHg
+        bloodGlucose:
+          type: number
+          format: double
+          nullable: true
+          description: 血糖 mmol/L
+        bodyTemperature:
+          type: number
+          format: double
+          nullable: true
+          description: 体温 ℃
+        spo2:
+          type: integer
+          nullable: true
+          description: 血氧 %
+        respiratoryRate:
+          type: integer
+          nullable: true
+          description: 呼吸频率 次/分
+        sleepDurationHours:
+          type: number
+          format: double
+          nullable: true
+          description: 睡眠时长 小时
+        deepSleepHours:
+          type: number
+          format: double
+          nullable: true
+          description: 深睡时长 小时
+        remSleepHours:
+          type: number
+          format: double
+          nullable: true
+          description: REM 时长 小时
+        sleepScore:
+          type: integer
+          nullable: true
+          description: 睡眠评分 0-100
+        awakeTimes:
+          type: integer
+          nullable: true
+          description: 夜醒次数
+        mindfulMinutes:
+          type: integer
+          nullable: true
+          description: 正念分钟

@@ -1,87 +1,183 @@
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Apple HIG 设计令牌（Pinguo design tokens 风格）
+ * 锚点遵循 Apple Human Interface Guidelines 系统色：
+ * System Blue #007AFF / System Green #34C759 / System Red #FF3B30
+ * system grays / label / background colors
+ */
+
 :root {
   --font-size: 16px;
-  --background: #eef4f2;
-  --foreground: #132123;
-  --card: #ffffff;
-  --card-foreground: #132123;
-  --popover: #ffffff;
-  --popover-foreground: #132123;
-  --primary: #134e4a;
-  --primary-foreground: #f7fffd;
-  --secondary: #e4eeeb;
-  --secondary-foreground: #163234;
-  --muted: #dfe9e6;
-  --muted-foreground: #567174;
-  --accent: #dbe8e3;
-  --accent-foreground: #163234;
-  --destructive: #b9384f;
-  --destructive-foreground: #fff7f8;
-  --border: rgba(19, 33, 35, 0.1);
-  --input: transparent;
-  --input-background: #f5faf8;
-  --switch-background: #bfd0ca;
+
+  /* ===== PRIMITIVE PALETTE ===== */
+
+  /* brand - Apple System Blue */
+  --brand-50: #e8f2ff;
+  --brand-100: #cfe5ff;
+  --brand-200: #9fcbff;
+  --brand-300: #66abff;
+  --brand-400: #2e8dff;
+  --brand-500: #007aff;
+  --brand-600: #0064d6;
+  --brand-700: #004fad;
+  --brand-800: #003b82;
+  --brand-900: #00275a;
+
+  /* background - Apple system grays */
+  --background-50: #ffffff;
+  --background-100: #f7f7fa;
+  --background-200: #f2f2f7;
+  --background-300: #e5e5ea;
+  --background-400: #d1d1d6;
+  --background-500: #aeaeb2;
+  --background-600: #8e8e93;
+  --background-700: #3a3a3c;
+  --background-800: #1c1c1e;
+  --background-900: #000000;
+
+  /* state-success - Apple System Green */
+  --state-success: #34c759;
+  --state-success-dark: #30d158;
+  --state-success-surface: #e9f9ee;
+  --state-success-foreground: #ffffff;
+
+  /* state-error - Apple System Red */
+  --state-error: #ff3b30;
+  --state-error-dark: #ff453a;
+  --state-error-surface: #ffecea;
+  --state-error-foreground: #ffffff;
+
+  /* ===== SEMANTIC ROLES (light) ===== */
+  --background: var(--background-200);
+  --foreground: #1d1d1f;
+  --card: var(--background-50);
+  --card-foreground: #1d1d1f;
+  --popover: var(--background-50);
+  --popover-foreground: #000000;
+
+  --primary: var(--brand-500);
+  --primary-foreground: var(--background-50);
+  --secondary: var(--background-200);
+  --secondary-foreground: #1d1d1f;
+  --muted: var(--background-200);
+  --muted-foreground: #8e8e93;
+  --accent: var(--background-100);
+  --accent-foreground: #1d1d1f;
+  --destructive: var(--state-error);
+  --destructive-foreground: var(--state-error-foreground);
+  --success: var(--state-success);
+  --success-foreground: var(--state-success-foreground);
+  --border: var(--background-300);
+  --input: var(--background-400);
+  --ring: var(--brand-500);
+
   --font-weight-medium: 600;
   --font-weight-normal: 400;
-  --ring: rgba(17, 94, 89, 0.4);
-  --chart-1: #0f766e;
-  --chart-2: #2563eb;
-  --chart-3: #ca8a04;
-  --chart-4: #9333ea;
-  --chart-5: #ea580c;
-  --radius: 0.875rem;
-  --sidebar: #fcfffe;
-  --sidebar-foreground: #163234;
-  --sidebar-primary: #134e4a;
-  --sidebar-primary-foreground: #f7fffd;
-  --sidebar-accent: #eaf2ef;
-  --sidebar-accent-foreground: #163234;
-  --sidebar-border: rgba(19, 33, 35, 0.08);
-  --sidebar-ring: rgba(17, 94, 89, 0.35);
 
-  --surface-primary: #ffffff;
-  --surface-secondary: #f4f8f6;
-  --surface-header: #e3ece8;
-  --surface-tertiary: #e6efec;
-  --surface-border: rgba(19, 33, 35, 0.08);
-  --accent-soft: #d7ece7;
-  --accent-strong: #115e59;
-  --hero-start: #134e4a;
-  --hero-end: #0f2f3a;
-  --elevation-soft: 0 16px 32px -26px rgba(15, 23, 42, 0.45);
-  --elevation-strong: 0 28px 54px -32px rgba(15, 23, 42, 0.6);
+  /* chart - Apple system colors */
+  --chart-1: var(--state-success);
+  --chart-2: var(--brand-500);
+  --chart-3: #ff9500;
+  --chart-4: #5856d6;
+  --chart-5: #af52de;
+
+  /* RADIUS - Apple 风格大圆角 */
+  --radius: 1.2rem;
+
+  /* SHADOWS - Apple 风格柔和分层阴影 */
+  --shadow-2xs: 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05), 0 1px 3px -1px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 8px -2px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 8px 24px -8px rgba(0, 0, 0, 0.08), 0 4px 8px -4px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 16px 40px -10px rgba(0, 0, 0, 0.10), 0 8px 16px -8px rgba(0, 0, 0, 0.06);
+
+  /* 兼容旧组件的表面令牌（映射到 Apple 调色板） */
+  --surface-primary: var(--background-50);
+  --surface-secondary: var(--background-100);
+  --surface-header: var(--background-200);
+  --surface-tertiary: var(--background-200);
+  --surface-border: rgba(60, 60, 67, 0.08);
+  --accent-soft: var(--brand-50);
+  --accent-strong: var(--brand-500);
+  --hero-start: var(--brand-500);
+  --hero-end: var(--brand-700);
+  --elevation-soft: var(--shadow-md);
+  --elevation-strong: var(--shadow-lg);
+
+  /* 输入相关 */
+  --input-background: var(--background-50);
+  --switch-background: var(--background-400);
+
+  /* sidebar */
+  --sidebar: var(--background-200);
+  --sidebar-foreground: #1d1d1f;
+  --sidebar-primary: var(--brand-500);
+  --sidebar-primary-foreground: var(--background-50);
+  --sidebar-accent: var(--background-300);
+  --sidebar-accent-foreground: #1d1d1f;
+  --sidebar-border: var(--background-300);
+  --sidebar-ring: var(--brand-500);
+
+  /* SPACING */
+  --spacing: 0.24rem;
 }
 
+/* ===== SEMANTIC ROLES - dark ===== */
 .dark {
-  --background: #0f1517;
-  --foreground: #eef6f4;
-  --card: #162023;
-  --card-foreground: #eef6f4;
-  --popover: #162023;
-  --popover-foreground: #eef6f4;
-  --primary: #b7f3e8;
-  --primary-foreground: #102527;
-  --secondary: #223135;
-  --secondary-foreground: #eef6f4;
-  --muted: #1c282c;
-  --muted-foreground: #95afb0;
-  --accent: #223135;
-  --accent-foreground: #eef6f4;
-  --destructive: #f08aa3;
-  --destructive-foreground: #3b0d16;
-  --border: rgba(255, 255, 255, 0.08);
-  --input: #223135;
-  --ring: rgba(183, 243, 232, 0.25);
-  --surface-primary: #162023;
-  --surface-secondary: #1c282c;
-  --surface-header: #24363b;
-  --surface-tertiary: #223135;
+  --background: var(--background-900);
+  --foreground: #f5f5f7;
+  --card: var(--background-800);
+  --card-foreground: #f5f5f7;
+  --popover: var(--background-700);
+  --popover-foreground: #f5f5f7;
+
+  --primary: var(--brand-400);
+  --primary-foreground: var(--background-900);
+  --secondary: var(--background-800);
+  --secondary-foreground: #f5f5f7;
+  --muted: var(--background-800);
+  --muted-foreground: #8e8e93;
+  --accent: var(--background-700);
+  --accent-foreground: #f5f5f7;
+  --destructive: var(--state-error-dark);
+  --destructive-foreground: var(--state-error-foreground);
+  --success: var(--state-success-dark);
+  --success-foreground: var(--state-success-foreground);
+  --border: var(--background-700);
+  --input: var(--background-700);
+  --ring: var(--brand-400);
+
+  --chart-1: var(--state-success-dark);
+  --chart-2: var(--brand-400);
+  --chart-3: #ff9f0a;
+  --chart-4: #5e5ce6;
+  --chart-5: #bf5af2;
+
+  --surface-primary: var(--background-800);
+  --surface-secondary: var(--background-700);
+  --surface-header: var(--background-700);
+  --surface-tertiary: var(--background-700);
   --surface-border: rgba(255, 255, 255, 0.08);
-  --accent-soft: #113f3b;
-  --accent-strong: #7cd4c4;
+  --accent-soft: rgba(0, 122, 255, 0.18);
+  --accent-strong: var(--brand-400);
   --hero-start: #143b41;
   --hero-end: #0c1820;
+  --elevation-soft: 0 4px 8px -2px rgba(0, 0, 0, 0.44), 0 2px 4px -2px rgba(0, 0, 0, 0.36);
+  --elevation-strong: 0 8px 24px -8px rgba(0, 0, 0, 0.50), 0 4px 8px -4px rgba(0, 0, 0, 0.40);
+
+  --input-background: var(--background-700);
+  --switch-background: var(--background-600);
+
+  --sidebar: var(--background-800);
+  --sidebar-foreground: #f5f5f7;
+  --sidebar-primary: var(--brand-400);
+  --sidebar-primary-foreground: var(--background-900);
+  --sidebar-accent: var(--background-700);
+  --sidebar-accent-foreground: #f5f5f7;
+  --sidebar-border: var(--background-700);
+  --sidebar-ring: var(--brand-400);
 }
 
 @theme inline {
@@ -101,6 +197,8 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-input-background: var(--input-background);
@@ -111,10 +209,22 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-300: var(--brand-300);
+  --color-brand-400: var(--brand-400);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
+  --color-state-success: var(--state-success);
+  --color-state-success-surface: var(--state-success-surface);
+  --color-state-error: var(--state-error);
+  --color-state-error-surface: var(--state-error-surface);
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl: calc(var(--radius) * 1.25);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -132,6 +242,7 @@
 
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: 'tnum' on;
   }
 
   *::-webkit-scrollbar {

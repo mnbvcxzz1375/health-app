@@ -1,4 +1,4 @@
-﻿import { defineStore } from 'pinia'
+import { defineStore } from 'pinia'
 import { getAuthSession, loginAccount, logoutAccount, registerAccount } from '@/api/modules/auth'
 
 type AuthUser = {
@@ -41,7 +41,7 @@ function readSession(): AuthSession | null {
   if (typeof window === 'undefined') return null
   const session = safeParse<AuthSession | null>(window.localStorage.getItem(SESSION_KEY), null)
   if (!session?.token) return null
-  if (session.token.startsWith('mock-token-')) return null
+  // Allow mock tokens for offline/fallback mode
   return session
 }
 

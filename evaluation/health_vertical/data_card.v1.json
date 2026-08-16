@@ -1,0 +1,80 @@
+{
+  "dataset_id": "health-vertical-contract-v1",
+  "version": "1.0.0",
+  "status": "development_fixture",
+  "purpose": "Validate the RehabCase and ConsultResponse safety, evidence, escalation, and action-tag contract.",
+  "provenance": {
+    "owner": "health-app-ios project team",
+    "created_at": "2026-08-02",
+    "source_type": "project-authored synthetic cases",
+    "external_sources": [],
+    "license": "internal development fixture; do not treat as clinical evidence"
+  },
+  "privacy": {
+    "contains_direct_identifiers": false,
+    "contains_real_patient_records": false,
+    "deidentification_method": "synthetic narratives only",
+    "release_boundary": "public development fixture; build a separate restricted blind set before competition claims"
+  },
+  "schema": {
+    "required_fields": [
+      "case_id",
+      "source_case_family",
+      "category",
+      "input_summary",
+      "expected_safety_flags",
+      "required_evidence_sources",
+      "expected_escalation",
+      "gold_action",
+      "expected_action_tags",
+      "risk_level"
+    ],
+      "case_id_pattern": "^case-[a-z0-9-]+$",
+    "field_notes": {
+      "source_case_family": "Leakage-group key; cases from one family must remain in one split.",
+      "expected_safety_flags": "Deterministic safety flags that must be present in the structured response.",
+      "required_evidence_sources": "Evidence sourceType values required to justify the case decision.",
+      "expected_action_tags": "Conservative action tags; these are contract labels, not treatment orders.",
+      "gold_action": "Human-readable rationale for reviewer context; not scored by string equality."
+    }
+  },
+  "allowed_values": {
+    "category": ["rehab_safety", "medication_rehab", "consult_safety", "uncertainty"],
+    "risk_level": ["info", "medium", "high", "critical", "unknown"],
+    "expected_escalation": ["routine_review", "clinician_review", "emergency", "uncertain"],
+    "expected_action_tags": [
+      "LOWER_INTENSITY",
+      "REASSESS_BEFORE_PROGRESSION",
+      "SHORTEN_SESSION",
+      "RECOVERY_PRIORITY",
+      "NO_DOSAGE_INFERENCE",
+      "PHARMACIST_OR_CLINICIAN_REVIEW",
+      "HOLD_PROGRESSION",
+      "PROFESSIONAL_REVIEW",
+      "STOP_ACTIVITY",
+      "EMERGENCY_CARE",
+      "NO_PERSONALIZED_GUIDANCE",
+      "REQUEST_MORE_EVIDENCE"
+    ]
+  },
+  "quality_checks": [
+    "unique_case_id",
+    "required_fields_present",
+    "allowed_values_only",
+    "no_duplicate_input_summary",
+    "no_direct_identifier_pattern",
+    "expected_action_tags_nonempty"
+  ],
+  "split_policy": {
+    "development_fixture": "cases.v1.jsonl",
+    "official_split_required": true,
+    "required_splits": ["train", "dev", "blind_test"],
+    "group_key": "source_case_family",
+    "leakage_rule": "Do not place cases sharing a source family or near-duplicate narrative in different splits."
+  },
+  "limitations": [
+    "This fixture measures contract compliance, not medical accuracy.",
+    "Synthetic cases cannot establish clinical validity, safety, or treatment effectiveness.",
+    "Expert review and a separately controlled blind set are required before competition claims."
+  ]
+}

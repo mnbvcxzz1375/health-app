@@ -25,7 +25,10 @@ public final class MedicationDtos {
       String ocrEndpoint,
       String yoloEndpoint,
       boolean enabled,
-      List<MedicationReminder> reminders
+      List<MedicationReminder> reminders,
+      String medicineType,
+      Long formulaId,
+      Long clinicalInfoId
   ) {}
 
   public record MedicationReminderInput(
@@ -46,7 +49,10 @@ public final class MedicationDtos {
       String ocrEndpoint,
       String yoloEndpoint,
       Boolean enabled,
-      List<MedicationReminderInput> reminders
+      List<MedicationReminderInput> reminders,
+      String medicineType,
+      Long formulaId,
+      Long clinicalInfoId
   ) {}
 
   public record MedicationRecognitionResult(

@@ -36,6 +36,7 @@ export async function registerAccount(payload: {
       }
       return { token: 'mock-token-' + Date.now(), user: mockUser }
     },
+    true,
   )
 }
 
@@ -55,6 +56,7 @@ export async function loginAccount(payload: { email: string; password: string })
       }
       return { token: 'mock-token-' + Date.now(), user: mockUser }
     },
+    true,
   )
 }
 

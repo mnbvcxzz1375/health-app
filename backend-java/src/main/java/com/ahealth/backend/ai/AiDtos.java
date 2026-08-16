@@ -58,4 +58,13 @@ public final class AiDtos {
       List<NerEntity> entities,
       String sourceText
   ) {}
+
+  /** 骨龄评估结果（由 bone_age/inference_service.py 返回，前端展示） */
+  public record BoneAgeResult(
+      Float estimatedAgeYears,        // 估计骨龄（岁）
+      Float confidence,               // 置信度 [0, 1]
+      String growthPlateStage,        // 骨骺分期描述
+      List<String> malformedIndicators, // 异常指标列表
+      String disclaimer               // 免责声明
+  ) {}
 }

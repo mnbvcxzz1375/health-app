@@ -42,3 +42,51 @@ coverage/
 # ML Model weights (download separately via HF mirror)
 backend-java/models/
 openmed-inference-service/__pycache__/
+posture-inference-service/models/
+bone_age/checkpoints/
+**/*.pt
+**/*.pth
+**/*.onnx
+**/*.task
+
+# Local workspace / agent state
+.agents/
+.trae/
+.workbuddy/
+.uploads/
+temp/
+_*/
+dev/
+tools/__pycache__/
+tools/
+create_docs.py
+current_paras_utf8.txt
+health-apple-redesign/
+data-crawler/output/
+
+# Generated documentation, competition exports and render outputs
+赛事要求/
+**/*.docx
+**/*.pdf
+**/*.7z
+**/*.zip
+_pdf_unpack/
+_final_inspect/
+_competition_pdf_render*/
+_docx_inspect*/
+_drawio_profile*/
+_render_competition*/
+
+# Local databases, uploads and service outputs
+**/uploads/
+**/runtime-data/
+**/*.sqlite
+**/*.sqlite3
+**/*.db
+**/logs/
+
+# Local secrets and machine-specific files
+AGENTS.md
+*.pem
+*.key
+*.p12

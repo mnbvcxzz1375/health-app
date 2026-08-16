@@ -61,7 +61,9 @@ public class ConsultController {
         "requestId", result.requestId(),
         "answer", result.answer(),
         "suggestions", result.suggestions(),
-        "disclaimer", result.disclaimer()
+        "disclaimer", result.disclaimer(),
+        "evidence", result.evidence(),
+        "safety", result.safety()
     )) + "\n");
     response.flushBuffer();
   }
@@ -87,7 +89,9 @@ public class ConsultController {
             objectMapper.writeValueAsString(Map.of(
                 "requestId", response.requestId(),
                 "suggestions", response.suggestions(),
-                "disclaimer", response.disclaimer()))));
+                "disclaimer", response.disclaimer(),
+                "evidence", response.evidence(),
+                "safety", response.safety()))));
         emitter.complete();
       } catch (Exception e) {
         emitter.completeWithError(e);

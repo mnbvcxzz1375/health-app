@@ -8,8 +8,12 @@ import org.springframework.stereotype.Service;
 @Service
 public class ContextService {
   private final JdbcTemplate jdbc;
+  private final PatientMemoryService patientMemoryService;
 
-  public ContextService(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+  public ContextService(JdbcTemplate jdbc, PatientMemoryService patientMemoryService) {
+    this.jdbc = jdbc;
+    this.patientMemoryService = patientMemoryService;
+  }
 
   public ContextDtos.ContextSnapshot getSnapshot() {
     long uid = CurrentUser.requireUserId();
@@ -21,9 +25,10 @@ public class ContextService {
     ContextDtos.UserHealthBaseline baseline = buildHealthBaseline(uid);
     ContextDtos.MedicationContextSummary medSummary = buildMedicationContextSummary(uid);
     ContextDtos.InteractionMemorySummary interactionSummary = buildInteractionSummary(uid);
+    ContextDtos.PatientMemoryBrief patientMemory = patientMemoryService.getBrief(uid);
     return new ContextDtos.ContextSnapshot(
         systemSummary, dailySummary, activeConcerns, medications, memories,
-        baseline, medSummary, interactionSummary
+        baseline, medSummary, interactionSummary, patientMemory
     );
   }
 
@@ -45,6 +50,10 @@ public class ContextService {
     );
   }
 
+  public void recordConsultSummary(String question, String answer) {
+    patientMemoryService.recordConsultSummary(question, answer);
+  }
+
   private String buildSystemSummary(long uid) {
     var rows = jdbc.queryForList(
         "SELECT name,age,gender,height,weight,focus FROM user_profiles up LEFT JOIN user_settings us ON us.user_id=up.id WHERE up.id=?", uid);
@@ -59,13 +68,16 @@ public class ContextService {
     var rows = jdbc.queryForList(
         "SELECT hr,sleep_score,stress_score,vo2_max,exercise_minutes,stand_hours,"
         + "active_energy_kcal,flights_climbed,hrv_millis,mindful_minutes,steps"
-        + " FROM monitor_records ORDER BY recorded_at DESC LIMIT 1");
+        + " FROM monitor_records WHERE user_id=? ORDER BY recorded_at DESC LIMIT 1", uid);
     if (rows.isEmpty()) return "暂无监测数据";
     var r = rows.get(0);
     List<String> parts = new ArrayList<>();
-    parts.add(String.format("心率 %s 次/分", str(r.get("hr"))));
-    parts.add(String.format("睡眠评分 %s", str(r.get("sleep_score"))));
-    parts.add(String.format("压力指数 %s", str(r.get("stress_score"))));
+    int hr = intVal(r.get("hr"));
+    int sleep = intVal(r.get("sleep_score"));
+    int stress = intVal(r.get("stress_score"));
+    if (hr > 0) parts.add(String.format("心率 %d 次/分", hr));
+    if (sleep > 0) parts.add(String.format("睡眠评分 %d", sleep));
+    if (stress > 0) parts.add(String.format("压力指数 %d", stress));
     int steps = intVal(r.get("steps"));
     if (steps > 0) parts.add(String.format("步数 %d", steps));
     int exMin = intVal(r.get("exercise_minutes"));
@@ -80,13 +92,13 @@ public class ContextService {
     if (hrv > 0) parts.add(String.format("HRV %d ms", hrv));
     int mindful = intVal(r.get("mindful_minutes"));
     if (mindful > 0) parts.add(String.format("正念 %d 分钟", mindful));
-    return String.join("，", parts);
+    return parts.isEmpty() ? "暂无监测数据" : String.join("，", parts);
   }
 
   private List<String> buildActiveConcerns(long uid) {
     var rows = jdbc.queryForList(
         "SELECT hr,sleep_score,stress_score,vo2_max,exercise_minutes,stand_hours,hrv_millis,steps"
-        + " FROM monitor_records ORDER BY recorded_at DESC LIMIT 1");
+        + " FROM monitor_records WHERE user_id=? ORDER BY recorded_at DESC LIMIT 1", uid);
     List<String> concerns = new ArrayList<>();
     if (rows.isEmpty()) return concerns;
     var r = rows.get(0);
@@ -100,7 +112,7 @@ public class ContextService {
     int hrv = intVal(r.get("hrv_millis"));
 
     if (hr > 90) concerns.add("静息心率偏高，建议关注心血管负荷");
-    if (sleep < 70) concerns.add("睡眠质量偏低，建议调整作息");
+    if (sleep > 0 && sleep < 70) concerns.add("睡眠质量偏低，建议调整作息");
     if (stress > 65) concerns.add("压力指数偏高，建议增加放松活动");
     if (vo2 > 0 && vo2 < 35) concerns.add("最大摄氧量偏低，建议增加有氧运动");
     if (exMin > 0 && exMin < 15) concerns.add("锻炼时间不足，建议每天至少 30 分钟中等强度运动");
@@ -135,20 +147,20 @@ public class ContextService {
     var baseline = jdbc.queryForList(
         "SELECT AVG(hr) as a_hr, AVG(sleep_score) as a_sleep, AVG(stress_score) as a_stress,"
         + " AVG(vo2_max) as a_vo2, AVG(steps) as a_steps"
-        + " FROM monitor_records WHERE recorded_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)");
+        + " FROM monitor_records WHERE user_id=? AND recorded_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)", uid);
     var profile = jdbc.queryForList("SELECT risk_score, risk_level FROM user_profiles WHERE id=?", uid);
 
-    int riskScore = 18;
-    String riskLevel = "低风险";
+    int riskScore = 0;
+    String riskLevel = "unknown";
     if (!profile.isEmpty()) {
       riskScore = intVal(profile.get(0).get("risk_score"));
       riskLevel = str(profile.get(0).get("risk_level"));
     }
 
     return new ContextDtos.UserHealthBaseline(
-        safeInt(baseline, 0, "a_hr", 72),
-        safeDouble(baseline, 0, "a_sleep", 76),
-        safeDouble(baseline, 0, "a_stress", 50),
+        safeInt(baseline, 0, "a_hr", 0),
+        safeDouble(baseline, 0, "a_sleep", 0),
+        safeDouble(baseline, 0, "a_stress", 0),
         safeDouble(baseline, 0, "a_vo2", 0),
         safeInt(baseline, 0, "a_steps", 0),
         riskScore,

@@ -35,7 +35,7 @@ describe('ClinicalFeatureNavBar', () => {
     expect(screen.getByRole('button', { name: '返回' })).toBeInTheDocument()
     expect(screen.getByText('用药提醒')).toBeInTheDocument()
     expect(screen.getByTestId('feature-nav-spacer')).toBeInTheDocument()
-    expect(container.querySelector('nav')).toHaveStyle({ width: '75%' })
+    expect(container.querySelector('nav')).toHaveStyle({ width: '100%' })
   })
 
   it('navigates to the configured target when clicking back', async () => {

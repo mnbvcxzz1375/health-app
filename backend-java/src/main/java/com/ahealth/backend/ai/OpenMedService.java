@@ -22,6 +22,8 @@ public class OpenMedService {
   private final String apiToken;
   private final String nerModel;
   private final String piiModel;
+  // 蒸馏后 student 模型名（仅作为元信息，实际切换由本地推理服务的环境变量 OPENMED_PII_USE_TEACHER 控制）
+  private final String piiStudentModel;
   private final String localInferenceUrl;
 
   public OpenMedService(
@@ -29,12 +31,14 @@ public class OpenMedService {
       @Value("${OPENMED_API_TOKEN:}") String apiToken,
       @Value("${OPENMED_NER_MODEL:OpenMed/OpenMed-NER-PharmaDetect-SuperMedical-125M}") String nerModel,
       @Value("${OPENMED_PII_MODEL:OpenMed/OpenMed-PII-Chinese-QwenMed-XLarge-600M-v1}") String piiModel,
+      @Value("${OPENMED_PII_STUDENT_MODEL:OpenMed-PII-DistilBERT-chinese}") String piiStudentModel,
       @Value("${OPENMED_LOCAL_URL:http://127.0.0.1:8012}") String localInferenceUrl
   ) {
     this.objectMapper = objectMapper;
     this.apiToken = apiToken == null ? "" : apiToken.trim();
     this.nerModel = nerModel;
     this.piiModel = piiModel;
+    this.piiStudentModel = piiStudentModel;
     this.localInferenceUrl = localInferenceUrl.endsWith("/") ? localInferenceUrl.substring(0, localInferenceUrl.length() - 1) : localInferenceUrl;
     this.httpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(20))

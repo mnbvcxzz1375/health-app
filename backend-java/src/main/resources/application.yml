@@ -9,10 +9,12 @@ server:
 spring:
   application:
     name: ahealth-backend
+  main:
+    allow-bean-definition-overriding: true
   datasource:
     url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/health_monitoring?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=utf8}
     username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:123456}
+    password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
   flyway:
     baseline-on-migrate: true
@@ -33,6 +35,55 @@ spring:
   jackson:
     time-zone: Asia/Shanghai
     default-property-inclusion: non_null
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 5s
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+
+# LangChain4j OpenAI 兼容客户端（指向 DashScope OpenAI 兼容端点）
+langchain4j:
+  open-ai:
+    chat-model:
+      api-key: ${DASHSCOPE_API_KEY:${QWEN_API_KEY:}}
+      base-url: ${DASHSCOPE_BASE_URL:https://coding.dashscope.aliyuncs.com/v1}
+      model-name: ${DASHSCOPE_CHAT_MODEL:kimi-k2.5}
+      temperature: 0.3
+      timeout: PT180S
+      log-requests: false
+      log-responses: false
+    embedding-model:
+      api-key: ${DASHSCOPE_API_KEY:${QWEN_API_KEY:}}
+      base-url: ${DASHSCOPE_BASE_URL:https://coding.dashscope.aliyuncs.com/v1}
+      model-name: ${DASHSCOPE_EMBEDDING_MODEL:text-embedding-v3}
+      timeout: PT60S
+
+# RAG 与缓存自定义配置
+rag:
+  redis:
+    index-name: ${RAG_INDEX_NAME:ahealth_rag}
+    prefix: ${RAG_KEY_PREFIX:rag:doc:}
+    vector-dimension: 1024      # DashScope text-embedding-v3 输出维度
+    distance-metric: COSINE
+    # HNSW 索引参数（精度优先配置，适合医疗健康知识检索）
+    # M=32：每个节点的最大邻居数，越大精度越高、内存占用越大（默认 16，调优 32）
+    # EF_CONSTRUCTION=400：建索引时候选邻居池大小，越大索引质量越好（默认 200，调优 400）
+    # EF_RUNTIME=50：查询时候选邻居池大小，越大召回越准（默认 10，调优 50）
+    hnsw-m: ${RAG_HNSW_M:32}
+    hnsw-ef-construction: ${RAG_HNSW_EF_CONSTRUCTION:400}
+    hnsw-ef-runtime: ${RAG_HNSW_EF_RUNTIME:50}
+  cache:
+    llm-ttl-hours: 168          # 精确缓存 7 天
+    semantic-threshold: 0.92    # 语义缓存相似度阈值
+    agent-max-iterations: 3     # Agent ReAct loop 最大轮数
+  search:
+    mmr-lambda: 0.7             # MMR 多样性权重：0.0=完全多样性，1.0=完全相关性
 
 management:
   endpoints:
@@ -47,6 +98,14 @@ springdoc:
 custom:
   medication:
     recognize-url: ${CUSTOM_MEDICATION_RECOGNIZE_URL:http://127.0.0.1:8011/recognize/medications}
+  # Admin 用户 ID 列表（逗号分隔），用于保护 /api/admin/* 端点
+  # 默认 1 = 注册的第一个用户；生产环境通过环境变量 ADMIN_USER_IDS 覆盖
+  admin:
+    user-ids: ${ADMIN_USER_IDS:1}
+
+# 骨龄评估推理服务（bone_age/inference_service.py, port 8013）
+# 通过环境变量 BONE_AGE_SERVICE_URL 覆盖，默认 http://127.0.0.1:8013
+# 在 BoneAgeService 的 @Value("${BONE_AGE_SERVICE_URL:http://127.0.0.1:8013}") 中读取
 
 # OpenMed / HuggingFace Inference — configured via environment variables.
 # Model IDs default to OpenMed's HuggingFace models in @Value annotations.
@@ -54,3 +113,95 @@ custom:
 
 # ROOK Unified Device API — configured via environment variables.
 # Model defaults are set in @Value annotations in RookService.java.
+
+# ===== 设备聚合平台配置 =====
+# 所有 OAuth Provider 未配置真实 client-id/secret 时 isConfigured()=false，
+# 前端展示「未配置」，OAuth 端点返回 503，不影响其他 Provider 与 manual/apple_health/bluetooth。
+device:
+  aggregation:
+    # AES-256 加密密钥（Base64 编码的 32 字节）。生产环境必须通过环境变量注入。
+    # 生成方式：openssl rand -base64 32
+    # 留空时 TokenEncryptionService.isConfigured()=false，OAuth Provider 无法持久化 token。
+    encryption:
+      key: ${DEVICE_AGG_ENCRYPTION_KEY:}
+    # OAuth 回调基础 URL，前端路由 /devices/oauth/callback/:provider 由后端拼接完整 redirect_uri
+    oauth:
+        redirect-base-url: ${DEVICE_OAUTH_REDIRECT_BASE_URL:http://127.0.0.1:4173}
+        # 生产环境请配置固定的服务端密钥；未配置时仅当前进程有效，不适合多实例部署。
+        # state-secret is supplied through DEVICE_OAUTH_STATE_SECRET in production.
+        state-secret: ${DEVICE_OAUTH_STATE_SECRET:}
+  providers:
+    garmin:
+      client-id: ${GARMIN_CLIENT_ID:}
+      client-secret: ${GARMIN_CLIENT_SECRET:}
+      auth-url: https://connect.garmin.com/oauth2/authorize
+      token-url: https://connectapi.garmin.com/oauth2/token
+      api-base: https://connectapi.garmin.com
+    oura:
+      client-id: ${OURA_CLIENT_ID:}
+      client-secret: ${OURA_CLIENT_SECRET:}
+      auth-url: https://cloud.ouraring.com/oauth/authorize
+      token-url: https://api.ouraring.com/v1/oauth/token
+      api-base: https://api.ouraring.com/v2
+    fitbit:
+      client-id: ${FITBIT_CLIENT_ID:}
+      client-secret: ${FITBIT_CLIENT_SECRET:}
+      auth-url: https://www.fitbit.com/oauth2/authorize
+      token-url: https://api.fitbit.com/oauth2/token
+      api-base: https://api.fitbit.com
+    withings:
+      client-id: ${WITHINGS_CLIENT_ID:}
+      client-secret: ${WITHINGS_CLIENT_SECRET:}
+      auth-url: https://account.withings.com/oauth2_user/authorize2
+      token-url: https://wbsapi.withings.net/v2/oauth2
+      api-base: https://wbsapi.withings.net
+    polar:
+      client-id: ${POLAR_CLIENT_ID:}
+      client-secret: ${POLAR_CLIENT_SECRET:}
+      auth-url: https://flow.polar.com/oauth2/authorization
+      token-url: https://polarremote.com/v2/oauth2/token
+      api-base: https://www.polaraccesslink.com
+    whoop:
+      client-id: ${WHOOP_CLIENT_ID:}
+      client-secret: ${WHOOP_CLIENT_SECRET:}
+      auth-url: https://api.prod.whoop.com/oauth/oauth2/auth
+      token-url: https://api.prod.whoop.com/oauth/oauth2/token
+      api-base: https://api.prod.whoop.com
+    dexcom:
+      client-id: ${DEXCOM_CLIENT_ID:}
+      client-secret: ${DEXCOM_CLIENT_SECRET:}
+      auth-url: https://api.dexcom.com/v2/oauth2/login
+      token-url: https://api.dexcom.com/v2/oauth2/token
+      api-base: https://api.dexcom.com
+    strava:
+      client-id: ${STRAVA_CLIENT_ID:}
+      client-secret: ${STRAVA_CLIENT_SECRET:}
+      auth-url: https://www.strava.com/oauth/authorize
+      token-url: https://www.strava.com/oauth/token
+      api-base: https://www.strava.com/api/v3
+    samsung-health:
+      client-id: ${SAMSUNG_HEALTH_CLIENT_ID:}
+      client-secret: ${SAMSUNG_HEALTH_CLIENT_SECRET:}
+      # Samsung Health 需合作伙伴 SDK/网关；不填伪造默认端点。
+      auth-url: ${SAMSUNG_HEALTH_AUTH_URL:}
+      token-url: ${SAMSUNG_HEALTH_TOKEN_URL:}
+      api-base: ${SAMSUNG_HEALTH_API_BASE:}
+    mi-fitness:
+      client-id: ${MI_FITNESS_CLIENT_ID:}
+      client-secret: ${MI_FITNESS_CLIENT_SECRET:}
+      auth-url: https://account.xiaomi.com/oauth2/authorize
+      token-url: https://account.xiaomi.com/oauth2/token
+      api-base: https://api.mi-fitness.com
+    zepp:
+      client-id: ${ZEPP_CLIENT_ID:}
+      client-secret: ${ZEPP_CLIENT_SECRET:}
+      auth-url: https://oauth.zepp.com/oauth2/authorize
+      token-url: https://oauth.zepp.com/oauth2/token
+      api-base: https://openapi.zepp.com
+    health-connect:
+      client-id: ${HEALTH_CONNECT_CLIENT_ID:}
+      client-secret: ${HEALTH_CONNECT_CLIENT_SECRET:}
+      # Health Connect 需 Android SDK/部署方网关；不填伪造默认端点。
+      auth-url: ${HEALTH_CONNECT_AUTH_URL:}
+      token-url: ${HEALTH_CONNECT_TOKEN_URL:}
+      api-base: ${HEALTH_CONNECT_API_BASE:}

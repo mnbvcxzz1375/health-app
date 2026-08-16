@@ -1,12 +1,18 @@
-﻿<template>
+<template>
   <RouterLink
     :to="to"
-    class="group flex flex-col items-center gap-1.5 rounded-[1.15rem] px-2 py-2 text-[11px] transition duration-200"
-    :class="isActive ? 'bg-[color:var(--accent-soft)] text-slate-950' : 'text-slate-500 hover:bg-white hover:text-slate-900'"
+    class="group flex flex-col items-center justify-center gap-0.5 transition-colors duration-150 motion-reduce:transition-none"
+    :class="[
+      variant === 'sidebar'
+        ? 'flex-row gap-2.5 rounded-xl px-3 py-2.5 text-[15px]'
+        : 'min-h-[44px] min-w-[44px] py-1 text-[10px]',
+      isActive
+        ? 'text-[color:var(--brand-500)] font-semibold'
+        : 'text-[color:var(--muted-foreground)] font-medium hover:text-[color:var(--foreground)]',
+    ]"
   >
-    <iconify-icon :icon="icon" width="20" height="20" />
-    <span class="leading-none">{{ label }}</span>
-    <span class="h-1 w-5 rounded-full bg-[color:var(--accent-strong)] transition-opacity" :class="isActive ? 'opacity-100' : 'opacity-0'" />
+    <iconify-icon :icon="icon" :width="variant === 'sidebar' ? 20 : 22" :height="variant === 'sidebar' ? 20 : 22" />
+    <span class="whitespace-nowrap leading-none">{{ label }}</span>
   </RouterLink>
 </template>
 
@@ -14,11 +20,15 @@
 import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
-const props = defineProps<{
-  to: string
-  label: string
-  icon: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    to: string
+    label: string
+    icon: string
+    variant?: 'sidebar' | 'bar'
+  }>(),
+  { variant: 'bar' },
+)
 
 const route = useRoute()
 const isActive = computed(() => route.path === props.to || route.path.startsWith(`${props.to}/`))

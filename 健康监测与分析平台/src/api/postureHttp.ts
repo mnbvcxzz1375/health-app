@@ -26,7 +26,8 @@ export const postureHttp = axios.create({
 
 postureHttp.interceptors.request.use((config) => {
   const token = readToken()
-  if (token) {
+  // Skip Authorization header for mock tokens
+  if (token && !token.startsWith('mock-token-')) {
     config.headers = config.headers ?? {}
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -49,12 +50,16 @@ postureHttp.interceptors.response.use(
       return Promise.reject(err)
     }
 
-    try {
-      const toast = useToastStore()
-      const message = err?.response?.data?.message ?? err.message ?? '网络请求失败'
-      toast.error('请求失败', message)
-    } catch {
-      // Pinia 尚未激活时忽略提示
+    // mock 模式、503、网络错误都不弹 toast
+    const isNetworkError = !err?.response
+    if (!env.useDevMock && status !== 503 && !isNetworkError) {
+      try {
+        const toast = useToastStore()
+        const message = err?.response?.data?.message ?? err.message ?? '网络请求失败'
+        toast.error('请求失败', message)
+      } catch {
+        // Pinia 尚未激活时忽略提示
+      }
     }
     return Promise.reject(err)
   },

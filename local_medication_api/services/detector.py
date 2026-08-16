@@ -8,14 +8,23 @@ from time import perf_counter
 
 from PIL import Image
 
-VENDOR_DIR = Path(__file__).resolve().parents[1] / "vendor"
-if str(VENDOR_DIR) not in sys.path:
-    sys.path.insert(0, str(VENDOR_DIR))
-
-from ultralytics import YOLO
-
 from local_medication_api.config import settings
 from local_medication_api.models import DetectionBox, DetectionPayload, ImageInfo
+
+# 根据是否使用蒸馏权重选择 ultralytics 包
+# - use_distilled=True: 标准 ultralytics（含 YOLO26，端到端无 NMS）
+# - use_distilled=False: vendored ultralytics（DINO-SO-YOLO，需要 vendor 目录）
+VENDOR_DIR = Path(__file__).resolve().parents[1] / "vendor"
+
+if settings.use_distilled:
+    # 蒸馏后 YOLO26 权重需标准 ultralytics 包
+    # 确保不优先使用 vendored 版本
+    sys.path[:] = [p for p in sys.path if p and Path(p).resolve() != VENDOR_DIR.resolve()]
+else:
+    if str(VENDOR_DIR) not in sys.path:
+        sys.path.insert(0, str(VENDOR_DIR))
+
+from ultralytics import YOLO
 
 
 class MedicationDetector:
@@ -43,6 +52,8 @@ class MedicationDetector:
         width, height = image.size
         model = self._load_model()
         started = perf_counter()
+        # YOLO26 端到端无 NMS，iou 参数对结果无影响（保留以兼容配置）
+        # YOLOv13/DINO-SO-YOLO 走标准 NMS 流程
         results = model.predict(
             source=image,
             conf=settings.confidence,

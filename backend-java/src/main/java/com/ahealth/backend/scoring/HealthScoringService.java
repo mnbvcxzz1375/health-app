@@ -15,20 +15,30 @@ public class HealthScoringService {
     long uid = CurrentUser.requireUserId();
 
     var latest = jdbc.queryForList(
-        "SELECT hr,sleep_score,stress_score,deep_sleep_hours,vo2_max,exercise_minutes,stand_hours,"
-        + "active_energy_kcal,flights_climbed,hrv_millis,mindful_minutes,steps FROM monitor_records ORDER BY recorded_at DESC LIMIT 1");
+        "SELECT hr,sleep_score,stress_score,systolic_bp,diastolic_bp,deep_sleep_hours,awake_times,"
+        + "vo2_max,exercise_minutes,stand_hours,active_energy_kcal,flights_climbed,hrv_millis,"
+        + "mindful_minutes,steps FROM monitor_records WHERE user_id=? ORDER BY recorded_at DESC LIMIT 1", uid);
     var baseline = jdbc.queryForList(
         "SELECT AVG(hr) as a_hr, AVG(sleep_score) as a_sleep, AVG(stress_score) as a_stress,"
-        + " AVG(vo2_max) as a_vo2, AVG(exercise_minutes) as a_ex, AVG(hrv_millis) as a_hrv"
-        + " FROM monitor_records WHERE recorded_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)");
+        + " AVG(systolic_bp) as a_systolic, AVG(diastolic_bp) as a_diastolic, AVG(vo2_max) as a_vo2,"
+        + " AVG(exercise_minutes) as a_ex, AVG(hrv_millis) as a_hrv"
+        + " FROM monitor_records WHERE user_id=? AND recorded_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)", uid);
     var trend7d = jdbc.queryForList(
         "SELECT ROUND(AVG(hr),0) as a_hr, ROUND(AVG(sleep_score),0) as a_sleep, ROUND(AVG(stress_score),0) as a_stress,"
         + " ROUND(AVG(vo2_max),1) as a_vo2, ROUND(AVG(exercise_minutes),0) as a_ex, ROUND(AVG(hrv_millis),0) as a_hrv"
-        + " FROM monitor_records WHERE recorded_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)");
+        + " FROM monitor_records WHERE user_id=? AND recorded_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)", uid);
 
-    int hr = safeInt(latest, 0, "hr", 72);
-    int sleep = safeInt(latest, 0, "sleep_score", 76);
-    int stress = safeInt(latest, 0, "stress_score", 50);
+    if (latest.isEmpty()) {
+      return noDataResponse("暂无可用的监测记录，请先同步设备或手动录入数据。", "none");
+    }
+    int observedMetrics = countObservedMetrics(latest.get(0));
+    if (observedMetrics < 2) {
+      return noDataResponse("当前监测数据不足，暂不生成综合健康评分。", "insufficient");
+    }
+
+    int hr = safeInt(latest, 0, "hr", 0);
+    int sleep = safeInt(latest, 0, "sleep_score", 0);
+    int stress = safeInt(latest, 0, "stress_score", 0);
     int systolic = safeInt(latest, 0, "systolic_bp", 0);
     int diastolic = safeInt(latest, 0, "diastolic_bp", 0);
     double vo2 = safeDouble(latest, 0, "vo2_max", 0);
@@ -40,9 +50,19 @@ public class HealthScoringService {
     int mindful = safeInt(latest, 0, "mindful_minutes", 0);
     int steps = safeInt(latest, 0, "steps", 0);
 
-    double bHr = safeDouble(baseline, 0, "a_hr", 72);
-    double bSleep = safeDouble(baseline, 0, "a_sleep", 76);
-    double bStress = safeDouble(baseline, 0, "a_stress", 50);
+    boolean hrAvailable = hr > 0;
+    boolean sleepAvailable = sleep > 0;
+    boolean stressAvailable = stress > 0;
+    boolean vo2Available = vo2 > 0;
+    boolean exerciseAvailable = exMin > 0;
+    boolean standEnergyAvailable = standH > 0 || activeKcal > 0;
+    boolean recoveryAvailable = hrv > 0;
+    boolean activityAvailable = steps > 0 || flights > 0;
+    boolean bloodPressureAvailable = systolic > 0 && diastolic > 0;
+
+    double bHr = safeDouble(baseline, 0, "a_hr", hr);
+    double bSleep = safeDouble(baseline, 0, "a_sleep", sleep);
+    double bStress = safeDouble(baseline, 0, "a_stress", stress);
     double bVo2 = safeDouble(baseline, 0, "a_vo2", vo2);
     double bEx = safeDouble(baseline, 0, "a_ex", exMin);
     double bHrv = safeDouble(baseline, 0, "a_hrv", hrv);
@@ -79,15 +99,15 @@ public class HealthScoringService {
     hrFinal = clamp(hrFinal, 0, 100);
 
     // 睡眠 (权重 0.18) — 复合评分算法
-    double deepSleepHours = safeDouble(latest, 0, "deep_sleep_hours", 1.8);
-    int awakeTimes = safeInt(latest, 0, "awake_times", 1);
+    double deepSleepHours = safeDouble(latest, 0, "deep_sleep_hours", 0);
+    int awakeTimes = safeInt(latest, 0, "awake_times", 0);
 
     // Component 1: Raw sleep score (40% of sleep dimension)
     double slRaw = sleep;
 
     // Component 2: Deep sleep quality (25% of sleep dimension)
     // Ideal: 1.5-2.5 hours deep sleep for 7-8h total
-    double deepRatio = deepSleepHours > 0 ? clamp(deepSleepHours / 2.0 * 100, 0, 100) : 70;
+    double deepRatio = deepSleepHours > 0 ? clamp(deepSleepHours / 2.0 * 100, 0, 100) : 0;
     double slDeep = deepRatio;
 
     // Component 3: Sleep continuity (20% of sleep dimension)
@@ -96,14 +116,13 @@ public class HealthScoringService {
 
     // Component 4: Sleep regularity (15% of sleep dimension)
     // Based on 7-day sleep score consistency
-    // NOTE: monitor_records has no user_id column (single-user demo design)
     var sleep7d = jdbc.queryForList(
-        "SELECT sleep_score FROM monitor_records WHERE recorded_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) ORDER BY recorded_at");
-    double slRegularity = 80; // default
+        "SELECT sleep_score FROM monitor_records WHERE user_id=? AND recorded_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) ORDER BY recorded_at", uid);
+    double slRegularity = sleep > 0 ? 80 : 0;
     if (sleep7d.size() >= 3) {
-      double mean = sleep7d.stream().mapToDouble(r -> safeDouble(List.of(r), 0, "sleep_score", 76)).average().orElse(76);
+      double mean = sleep7d.stream().mapToDouble(r -> safeDouble(List.of(r), 0, "sleep_score", 0)).average().orElse(0);
       double variance = sleep7d.stream()
-          .mapToDouble(r -> Math.pow(safeDouble(List.of(r), 0, "sleep_score", 76) - mean, 2))
+          .mapToDouble(r -> Math.pow(safeDouble(List.of(r), 0, "sleep_score", 0) - mean, 2))
           .average().orElse(0);
       double stdDev = Math.sqrt(variance);
       // Lower std dev = more regular = higher score
@@ -187,40 +206,52 @@ public class HealthScoringService {
     double bpFinal = bpScore * 0.5 + bpBase * 0.5;
 
     // 用药依从性 (权重 0.07)
-    double adherenceScore = scoreMedicationAdherence(uid);
+    MedicationScore medicationScore = scoreMedicationAdherence(uid);
+    double adherenceScore = medicationScore.score();
+    boolean adherenceAvailable = medicationScore.available();
     double adhFinal = adherenceScore;
 
-    // === 总分 (10 dimensions, weights sum to 1.0) ===
-    double overall = hrFinal * 0.13 + slFinal * 0.18 + stFinal * 0.13
-        + vo2Final * 0.09 + exFinal * 0.09 + seFinal * 0.09
-        + recFinal * 0.05 + actFinal * 0.13 + bpFinal * 0.08 + adhFinal * 0.07;
-    String risk = overall >= 80 ? "low" : overall >= 60 ? "medium" : "high";
+    // === 总分：只对有观测值的维度归一化，缺失维度不得贡献默认分 ===
+    double weightedScore = 0;
+    double availableWeight = 0;
+    if (hrAvailable) { weightedScore += hrFinal * 0.13; availableWeight += 0.13; }
+    if (sleepAvailable) { weightedScore += slFinal * 0.18; availableWeight += 0.18; }
+    if (stressAvailable) { weightedScore += stFinal * 0.13; availableWeight += 0.13; }
+    if (vo2Available) { weightedScore += vo2Final * 0.09; availableWeight += 0.09; }
+    if (exerciseAvailable) { weightedScore += exFinal * 0.09; availableWeight += 0.09; }
+    if (standEnergyAvailable) { weightedScore += seFinal * 0.09; availableWeight += 0.09; }
+    if (recoveryAvailable) { weightedScore += recFinal * 0.05; availableWeight += 0.05; }
+    if (activityAvailable) { weightedScore += actFinal * 0.13; availableWeight += 0.13; }
+    if (bloodPressureAvailable) { weightedScore += bpFinal * 0.08; availableWeight += 0.08; }
+    if (adherenceAvailable) { weightedScore += adhFinal * 0.07; availableWeight += 0.07; }
+    double overall = availableWeight > 0 ? weightedScore / availableWeight : 0;
+    String risk = availableWeight <= 0 ? "unknown" : overall >= 80 ? "low" : overall >= 60 ? "medium" : "high";
 
     List<ScoringDtos.CategoryScore> cats = new ArrayList<>();
     cats.add(cat("heartRate", "静息心率", hrFinal, hr, bHr, 0.13, "heart_rate",
-        String.format("年龄调整最优值 %.0f bpm，HRV修正 +%.1f%%", optimalRhr, hrvBonus)));
+        String.format("年龄调整最优值 %.0f bpm，HRV修正 +%.1f%%", optimalRhr, hrvBonus), hrAvailable));
     cats.add(cat("sleep", "睡眠质量", slFinal, sleep, bSleep, 0.18, "sleep_debt",
-        String.format("当前评分 %d，30天均值 %.0f，7天趋势 %.0f", sleep, bSleep, tSleep)));
+        String.format("当前评分 %d，30天均值 %.0f，7天趋势 %.0f", sleep, bSleep, tSleep), sleepAvailable));
     cats.add(cat("stress", "压力负荷", stFinal, 100 - stress, 100 - bStress, 0.13, "stress_elevated",
-        String.format("RMSSD %d ms，恢复趋势 %.0f%%，自主神经评分 %.0f", hrv, recoveryTrend, rmssdScore)));
+        String.format("RMSSD %d ms，恢复趋势 %.0f%%，自主神经评分 %.0f", hrv, recoveryTrend, rmssdScore), stressAvailable));
     cats.add(cat("vo2Max", "最大摄氧量", vo2Final, vo2, bVo2, 0.09, "vo2_low",
-        String.format("VO2Max %.1f ml/kg/min，30天均值 %.1f", vo2, bVo2)));
+        String.format("VO2Max %.1f ml/kg/min，30天均值 %.1f", vo2, bVo2), vo2Available));
     cats.add(cat("exercise", "锻炼时间", exFinal, exMin, bEx, 0.09, "exercise_deficit",
-        String.format("当前 %d 分钟，30天均值 %.0f 分钟", exMin, bEx)));
+        String.format("当前 %d 分钟，30天均值 %.0f 分钟", exMin, bEx), exerciseAvailable));
     cats.add(cat("standEnergy", "站立与活动", seFinal, standH, 0, 0.09, "sedentary",
-        String.format("站立 %d 小时 + 活动能量 %d kcal", standH, activeKcal)));
+        String.format("站立 %d 小时 + 活动能量 %d kcal", standH, activeKcal), standEnergyAvailable));
     cats.add(cat("recovery", "恢复状态", recFinal, hrv, bHrv, 0.05, "recovery_low",
-        String.format("HRV %d ms（RMSSD），30天均值 %.0f ms", hrv, bHrv)));
+        String.format("HRV %d ms（RMSSD），30天均值 %.0f ms", hrv, bHrv), recoveryAvailable));
     cats.add(cat("activity", "步行活动", actFinal, steps, 0, 0.13, "activity_low",
-        String.format("步数 %d + 楼层 %d", steps, flights)));
+        String.format("步数 %d + 楼层 %d", steps, flights), activityAvailable));
     cats.add(cat("bloodPressure", "血压", bpFinal, systolic, bSystolic, 0.08, "bp_elevated",
-        String.format("收缩压 %d / 舒张压 %d mmHg", systolic, diastolic)));
+        String.format("收缩压 %d / 舒张压 %d mmHg", systolic, diastolic), bloodPressureAvailable));
     cats.add(cat("medAdherence", "用药依从性", adhFinal, adherenceScore, 100, 0.07, "medication_nonadherence",
-        String.format("今日依从性 %.0f%%（基于服药记录）", adherenceScore)));
+        String.format("今日依从性 %.0f%%（基于服药记录）", adherenceScore), adherenceAvailable));
 
     List<ScoringDtos.TopRisk> topRisks = new ArrayList<>();
     for (ScoringDtos.CategoryScore c : cats) {
-      if (c.score() < 70) {
+      if (c.dataAvailable() && c.score() < 70) {
         topRisks.add(new ScoringDtos.TopRisk(
             c.attentionType(),
             c.label(),
@@ -232,20 +263,54 @@ public class HealthScoringService {
     topRisks.sort((a, b) -> Integer.compare(b.severity(), a.severity()));
 
     List<String> actions = new ArrayList<>();
-    if (hrFinal < 70) actions.add("关注心率恢复，适当减少运动强度");
-    if (slFinal < 70) actions.add("改善睡眠习惯，保持规律作息");
-    if (stFinal < 70) actions.add("增加放松训练，尝试深呼吸或冥想");
-    if (vo2Final < 60) actions.add("VO2Max 偏低，建议增加有氧运动频次");
-    if (exFinal < 60) actions.add("锻炼时间不足，建议每天至少 30 分钟中等强度运动");
-    if (seFinal < 60) actions.add("站立时间不足，建议每小时起身活动");
-    if (recFinal < 60) actions.add("恢复指标偏低，建议优先保证睡眠和正念练习");
-    if (actFinal < 60) actions.add("活动量偏低，建议增加日常步行");
-    if (bpFinal < 70) actions.add("血压偏高，建议低盐饮食并定期监测");
-    if (adhFinal < 80) actions.add("用药依从性不足，请按时服药并记录");
-    if (actions.isEmpty()) actions.add("保持当前良好状态");
+    if (hrAvailable && hrFinal < 70) actions.add("关注心率恢复，适当减少运动强度");
+    if (sleepAvailable && slFinal < 70) actions.add("改善睡眠习惯，保持规律作息");
+    if (stressAvailable && stFinal < 70) actions.add("增加放松训练，尝试深呼吸或冥想");
+    if (vo2Available && vo2Final < 60) actions.add("VO2Max 偏低，建议增加有氧运动频次");
+    if (exerciseAvailable && exFinal < 60) actions.add("锻炼时间不足，建议每天至少 30 分钟中等强度运动");
+    if (standEnergyAvailable && seFinal < 60) actions.add("站立时间不足，建议每小时起身活动");
+    if (recoveryAvailable && recFinal < 60) actions.add("恢复指标偏低，建议优先保证睡眠和正念练习");
+    if (activityAvailable && actFinal < 60) actions.add("活动量偏低，建议增加日常步行");
+    if (bloodPressureAvailable && bpFinal < 70) actions.add("血压偏高，建议低盐饮食并定期监测");
+    if (adherenceAvailable && adhFinal < 80) actions.add("用药依从性不足，请按时服药并记录");
+    if (actions.isEmpty()) actions.add(dataQualityWarning(observedMetrics));
 
-    String summary = String.format("综合评分 %.0f 分，风险等级：%s", overall, riskLevelCN(risk));
-    return new ScoringDtos.HealthScoreResponse(round(overall), risk, cats, topRisks, actions, summary);
+    String summary = String.format("综合评分 %.0f 分，风险等级：%s%s", overall, riskLevelCN(risk),
+        observedMetrics >= 8 ? "" : "（仅基于当前可用指标）");
+    String dataQuality = observedMetrics >= 8 ? "complete" : "partial";
+    List<String> dataWarnings = dataQuality.equals("complete")
+        ? List.of()
+        : List.of("当前评分仅基于部分监测指标，缺失指标不会被视为正常。请继续同步数据后再比较趋势。");
+    return new ScoringDtos.HealthScoreResponse(
+        round(overall), risk, cats, topRisks, actions, summary, dataQuality, dataWarnings);
+  }
+
+  private ScoringDtos.HealthScoreResponse noDataResponse(String message, String quality) {
+    return new ScoringDtos.HealthScoreResponse(
+        0,
+        "unknown",
+        List.of(),
+        List.of(new ScoringDtos.TopRisk(
+            "NO_MONITOR_DATA", "监测数据不足", message, 1)),
+        List.of("先同步 Apple Health 或智能穿戴数据，再生成个性化健康评分。"),
+        message,
+        quality,
+        List.of(message)
+    );
+  }
+
+  private int countObservedMetrics(Map<String, Object> row) {
+    String[] keys = {
+        "hr", "sleep_score", "stress_score", "systolic_bp", "diastolic_bp", "vo2_max",
+        "exercise_minutes", "stand_hours", "active_energy_kcal", "flights_climbed",
+        "hrv_millis", "mindful_minutes", "steps"
+    };
+    int count = 0;
+    for (String key : keys) {
+      Object value = row.get(key);
+      if (value instanceof Number number && number.doubleValue() > 0) count++;
+    }
+    return count;
   }
 
   private double scoreVO2Max(double vo2) {
@@ -311,7 +376,7 @@ public class HealthScoringService {
   }
 
   private double scoreBloodPressure(int systolic, int diastolic) {
-    if (systolic <= 0 && diastolic <= 0) return 75; // no data
+    if (systolic <= 0 || diastolic <= 0) return 0; // incomplete pair is not a normal reading
     // Based on AHA guidelines: normal <120/<80, elevated 120-129/<80, high >=130/>=80
     if (systolic < 120 && diastolic < 80) return 95;
     if (systolic < 130 && diastolic < 80) return 80;
@@ -320,12 +385,17 @@ public class HealthScoringService {
     return 20;
   }
 
-  private double scoreMedicationAdherence(long uid) {
+  private MedicationScore scoreMedicationAdherence(long uid) {
     try {
+      Integer activeMedicationCount = jdbc.queryForObject(
+          "SELECT COUNT(*) FROM medications WHERE user_id=? AND enabled=1", Integer.class, uid);
+      if (activeMedicationCount == null || activeMedicationCount <= 0) {
+        return new MedicationScore(0, false);
+      }
       String today = java.time.LocalDate.now().toString();
       var rows = jdbc.queryForList(
           "SELECT status FROM medication_intake_log WHERE user_id=? AND intake_date=?", uid, today);
-      if (rows.isEmpty()) return 85; // no medications to track = neutral
+      if (rows.isEmpty()) return new MedicationScore(0, false);
 
       int taken = 0;
       int total = rows.size();
@@ -333,16 +403,27 @@ public class HealthScoringService {
         String status = (String) r.get("status");
         if ("taken".equals(status) || "half".equals(status)) taken++;
       }
-      return clamp(60 + (taken / (double) total) * 40, 0, 100);
+      return new MedicationScore(clamp(60 + (taken / (double) total) * 40, 0, 100), true);
     } catch (Exception e) {
-      return 75; // table may not exist yet
+      return new MedicationScore(0, false);
     }
   }
 
-  private ScoringDtos.CategoryScore cat(String key, String label, double score, double current, double baseline, double weight, String attentionType, String algorithmNote) {
+  private ScoringDtos.CategoryScore cat(String key, String label, double score, double current,
+      double baseline, double weight, String attentionType, String algorithmNote,
+      boolean dataAvailable) {
     return new ScoringDtos.CategoryScore(key, label, round(score),
-        current, baseline, round(current - baseline), riskNote(score), attentionType, weight, algorithmNote);
+        current, baseline, round(current - baseline),
+        dataAvailable ? riskNote(score) : "数据不足", attentionType, weight, algorithmNote, dataAvailable);
   }
+
+  private String dataQualityWarning(int observedMetrics) {
+    return observedMetrics < 2
+        ? "监测指标不足，暂不生成个性化建议。"
+        : "暂未发现可操作的低风险指标；请继续同步完整监测数据后再比较趋势。";
+  }
+
+  private record MedicationScore(double score, boolean available) {}
 
   private double clamp(double v, double lo, double hi) { return Math.max(lo, Math.min(hi, v)); }
 

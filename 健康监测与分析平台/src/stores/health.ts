@@ -7,6 +7,7 @@
  * - 统一的数据刷新策略（轮询/推送）
  */
 import { defineStore } from 'pinia'
+import { getMonitorTrend, type MonitorRange } from '@/api/modules/monitor'
 
 export type MetricPoint = { t: string; v: number }
 
@@ -18,7 +19,18 @@ export const useHealthStore = defineStore('health', {
     stress7d: [] as MetricPoint[],
   }),
   actions: {
-    // TODO: 接入 API 获取
+    async refresh(range: MonitorRange = 'month') {
+      const [hr, sleep, stress] = await Promise.all([
+        getMonitorTrend('hr', range),
+        getMonitorTrend('sleep', range),
+        getMonitorTrend('stress', range),
+      ])
+      this.hr7d = hr.labels.map((t, index) => ({ t, v: Number(hr.values[index] ?? 0) }))
+      this.sleep7d = sleep.labels.map((t, index) => ({ t, v: Number(sleep.values[index] ?? 0) }))
+      this.stress7d = stress.labels.map((t, index) => ({ t, v: Number(stress.values[index] ?? 0) }))
+    },
+
+    /** Local-only fixture helper for screens that explicitly opt into mock data. */
     seedMock() {
       this.hr7d = [
         { t: '周一', v: 70 },

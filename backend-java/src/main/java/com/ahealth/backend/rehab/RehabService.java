@@ -24,11 +24,18 @@ public class RehabService {
   private final JdbcTemplate jdbcTemplate;
   private final JsonSupport jsonSupport;
   private final RookService rookService;
+  private final SmartRehabPlannerService smartRehabPlannerService;
 
-  public RehabService(JdbcTemplate jdbcTemplate, JsonSupport jsonSupport, RookService rookService) {
+  public RehabService(
+      JdbcTemplate jdbcTemplate,
+      JsonSupport jsonSupport,
+      RookService rookService,
+      SmartRehabPlannerService smartRehabPlannerService
+  ) {
     this.jdbcTemplate = jdbcTemplate;
     this.jsonSupport = jsonSupport;
     this.rookService = rookService;
+    this.smartRehabPlannerService = smartRehabPlannerService;
   }
 
   public RehabDtos.RehabPlanResponse getPlan() {
@@ -279,13 +286,34 @@ public class RehabService {
     if (count != null && count > 0) {
       return;
     }
+
+    // 智能计划路径：尝试读取用户身高/体重/年龄/性别
+    ProfileBrief brief = fetchProfileBrief(userId);
+    if (brief.height() > 0 && brief.weight() > 0 && brief.age() > 0) {
+      String goal = inferGoalFromSettings(userId);
+      var plan = smartRehabPlannerService.generatePlan(new RehabDtos.SmartPlanRequest(
+          brief.height(), brief.weight(), brief.age(), brief.gender(), goal, "sedentary"
+      ));
+      if (plan.exerciseIds() != null && !plan.exerciseIds().isEmpty()) {
+        replaceTodayPlanItems(userId, plan.exerciseIds());
+        return;
+      }
+    }
+
+    // Do not manufacture a generic plan when the profile is incomplete. The UI
+    // already exposes an empty-state action that leads the user to smart-plan setup.
+    if (brief.height() <= 0 || brief.weight() <= 0 || brief.age() <= 0) {
+      return;
+    }
+
+    // Fallback：缺数据时使用原 LIMIT 4 默认
     List<Long> exerciseIds = jdbcTemplate.query(
         """
         SELECT id
         FROM rehab_exercises
-        WHERE user_id IS NULL OR user_id = ?
+        WHERE (user_id IS NULL OR user_id = ?) AND minutes <= 8
         ORDER BY CASE WHEN user_id = ? THEN 0 ELSE 1 END, id ASC
-        LIMIT 4
+        LIMIT 3
         """,
         (rs, rowNum) -> rs.getLong("id"),
         userId,
@@ -295,6 +323,74 @@ public class RehabService {
       return;
     }
     replaceTodayPlanItems(userId, exerciseIds);
+  }
+
+  /** 直查 user_profiles + user_settings 取身高/体重/年龄/性别。 */
+  private ProfileBrief fetchProfileBrief(long userId) {
+    try {
+      Map<String, Object> row = jdbcTemplate.queryForMap(
+          """
+          SELECT us.age, us.gender, us.height, us.weight
+          FROM user_profiles up
+          JOIN user_settings us ON us.user_id = up.id
+          WHERE up.id = ?
+          """,
+          userId
+      );
+      return new ProfileBrief(
+          intValue(row.get("age"), 0),
+          stringValue(row.get("gender")),
+          doubleValue(row.get("height")),
+          doubleValue(row.get("weight"))
+      );
+    } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+      return new ProfileBrief(0, "", 0.0, 0.0);
+    }
+  }
+
+  /** 读 rehab_plan_settings.focus，关键词映射到智能计划目标。 */
+  private String inferGoalFromSettings(long userId) {
+    try {
+      String focus = jdbcTemplate.queryForObject(
+          "SELECT focus FROM rehab_plan_settings WHERE user_id = ? LIMIT 1",
+          String.class,
+          userId
+      );
+      if (focus == null) return "maintenance";
+      String lower = focus.toLowerCase();
+      if (lower.contains("减脂") || lower.contains("瘦身") || lower.contains("fat")) return "fat_loss";
+      if (lower.contains("增肌") || lower.contains("力量") || lower.contains("muscle")) return "muscle_gain";
+      if (lower.contains("康复") || lower.contains("恢复") || lower.contains("rehab")) return "rehab";
+      if (lower.contains("柔韧") || lower.contains("拉伸") || lower.contains("flex")) return "flexibility";
+      return "maintenance";
+    } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+      return "maintenance";
+    }
+  }
+
+  /** 供 Controller 调用：基于用户 profile 计算身体指标。 */
+  public RehabDtos.BodyMetrics calculateBodyMetrics(long userId) {
+    ProfileBrief brief = fetchProfileBrief(userId);
+    if (brief.height() <= 0 || brief.weight() <= 0 || brief.age() <= 0) {
+      return new RehabDtos.BodyMetrics(0, "unknown", 0, 0, 0);
+    }
+    String goal = inferGoalFromSettings(userId);
+    return smartRehabPlannerService.computeMetrics(
+        brief.height(), brief.weight(), brief.age(), brief.gender(), goal, "sedentary"
+    );
+  }
+
+  /** 供 Controller 调用：应用智能计划为今日计划。 */
+  @Transactional
+  public void applySmartPlan(long userId, List<Long> exerciseIds) {
+    if (exerciseIds == null || exerciseIds.isEmpty()) return;
+    replaceTodayPlanItems(userId, exerciseIds);
+  }
+
+  private record ProfileBrief(int age, String gender, double height, double weight) {}
+
+  private double doubleValue(Object value) {
+    return value instanceof Number n ? n.doubleValue() : 0.0;
   }
 
   private RehabDtos.RehabPlanSummary getPlanSummaryInternal(long userId) {

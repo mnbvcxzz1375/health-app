@@ -50,7 +50,7 @@ npm run typecheck
 1. 初始化数据库。
 
 ```bash
-mysql -uroot -p123456 < server/sql/init.sql
+mysql -uroot -pYOUR_LOCAL_PASSWORD < server/sql/init.sql
 ```
 
 2. 安装依赖并启动服务。
@@ -63,10 +63,10 @@ npm run dev
 
 监测数据来自 `monitor_records` 表，可自行插入或导入业务数据；`init.sql` 已包含首页/康复/设置等示例数据。
 
-默认端口为 `3001`，数据库默认 `root/123456`、`health_monitoring`，可在 `server/.env` 覆盖。
+默认端口为 `3001`，数据库用户名和密码请在 `server/.env` 中配置。
 
 默认示例用户为 `user_profiles.id = 1`，可直接在数据库中调整姓名/邮箱/风险评分等字段。
-认证示例账号：`liming@example.com` / `123456`（可在 `auth_users` 表中修改）。
+认证示例账号请在本地初始化数据后自行设置，不要使用仓库中的固定密码。
 
 ## 已接入真实接口的页面
 

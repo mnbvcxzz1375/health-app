@@ -1,22 +1,36 @@
 package com.ahealth.backend.medication;
 
 import com.ahealth.backend.ai.AiDtos;
+import com.ahealth.backend.ai.AnswerTemplateService;
 import com.ahealth.backend.ai.DashScopeService;
 import com.ahealth.backend.ai.DdiKnowledgeService;
+import com.ahealth.backend.ai.LlmCacheService;
 import com.ahealth.backend.ai.MedicalNerService;
 import com.ahealth.backend.ai.OcrPreprocessService;
 import com.ahealth.backend.ai.PiiScrubService;
+import com.ahealth.backend.ai.PromptTemplateService;
 import com.ahealth.backend.common.ApiException;
 import com.ahealth.backend.common.CurrentUser;
+import com.ahealth.backend.knowledge.InteractionCheckService;
+import com.ahealth.backend.knowledge.TcmFormulaService;
+import com.ahealth.backend.rag.RagDtos;
+import com.ahealth.backend.rag.RagSearchService;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -35,27 +49,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class MedicationService {
-  private static final String MEDICATION_RECOGNITION_SYSTEM_PROMPT = """
-      你是药盒文字结构化提取助手。
-      你只能依据当前上传图片中肉眼可见的文字填写字段，不允许使用文件名，不允许依赖常识推测，不允许编造内容。
-      如果某个字段无法从图片中确认，请返回空字符串或 null。
-      请只返回 JSON，不要返回 Markdown，不要解释。
-      固定返回结构为：
-      {"items":[{"name":"","alias":"","dosageValue":null,"dosageUnit":"","usage":"","notes":"","photoUrl":"","sourceText":""}]}
-      其中 dosageUnit 只能是 片、粒、毫升、滴、袋 之一；
-      usage 只能是 饭前、饭后、随餐、睡前、按需 之一；
-      sourceText 需要填写你确实从图片里读到的关键文字片段。
-      """;
-  private static final String MEDICATION_RECOGNITION_USER_PROMPT = """
-      请对本次上传的全部图片一次性完成识别。
-      如果多张图片属于同一种药，请合并为一条 items；
-      如果图片中有多种不同药品，请逐条返回。
-      需要提取并返回的字段只有：药品名称 name、口语别名 alias、单次剂量 dosageValue、剂量单位 dosageUnit、服用方式 usage、注意事项 notes、图片地址 photoUrl、识别依据 sourceText。
-      如果图中同时出现中文和英文药名，name 优先返回中文药名；alias 只在图中明确出现别名、品牌名或口语名称时再填写。
-      所有字段都只能来自图片可见文字，不确定就留空，不要用文件名、外部知识或推测补全。
-      """;
+  private static final Logger log = LoggerFactory.getLogger(MedicationService.class);
   private static final Pattern TIME_PATTERN = Pattern.compile("^\\d{2}:\\d{2}$");
   private static final Pattern NUMBER_PATTERN = Pattern.compile("(\\d+(?:\\.\\d+)?)");
+  private static final Duration CACHE_TTL = Duration.ofHours(168); // 7 天
 
   private final JdbcTemplate jdbcTemplate;
   private final DashScopeService dashScopeService;
@@ -63,6 +60,13 @@ public class MedicationService {
   private final MedicalNerService medicalNerService;
   private final OcrPreprocessService ocrPreprocessService;
   private final PiiScrubService piiScrubService;
+  private final InteractionCheckService interactionCheckService;
+  private final TcmFormulaService tcmFormulaService;
+  private final PromptTemplateService promptTemplateService;
+  private final AnswerTemplateService answerTemplateService;
+  private final LlmCacheService llmCacheService;
+  private final RagSearchService ragSearchService;
+  private final ObjectMapper objectMapper;
   private final String customMedicationRecognizeUrl;
   private final RestTemplate restTemplate;
 
@@ -73,6 +77,13 @@ public class MedicationService {
       MedicalNerService medicalNerService,
       OcrPreprocessService ocrPreprocessService,
       PiiScrubService piiScrubService,
+      InteractionCheckService interactionCheckService,
+      TcmFormulaService tcmFormulaService,
+      PromptTemplateService promptTemplateService,
+      AnswerTemplateService answerTemplateService,
+      LlmCacheService llmCacheService,
+      RagSearchService ragSearchService,
+      ObjectMapper objectMapper,
       @Value("${custom.medication.recognize-url:}") String customMedicationRecognizeUrl
   ) {
     this.jdbcTemplate = jdbcTemplate;
@@ -81,6 +92,13 @@ public class MedicationService {
     this.medicalNerService = medicalNerService;
     this.ocrPreprocessService = ocrPreprocessService;
     this.piiScrubService = piiScrubService;
+    this.interactionCheckService = interactionCheckService;
+    this.tcmFormulaService = tcmFormulaService;
+    this.promptTemplateService = promptTemplateService;
+    this.answerTemplateService = answerTemplateService;
+    this.llmCacheService = llmCacheService;
+    this.ragSearchService = ragSearchService;
+    this.objectMapper = objectMapper;
     this.customMedicationRecognizeUrl = customMedicationRecognizeUrl == null ? "" : customMedicationRecognizeUrl.trim();
     SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
     requestFactory.setConnectTimeout(10_000);
@@ -93,7 +111,8 @@ public class MedicationService {
     List<Map<String, Object>> rows = jdbcTemplate.queryForList(
         """
         SELECT id, name, alias, dosage_value, dosage_unit, usage_label, notes, photo_url,
-               enable_ocr, enable_yolo, ocr_endpoint, yolo_endpoint, enabled
+               enable_ocr, enable_yolo, ocr_endpoint, yolo_endpoint, enabled,
+               medicine_type, formula_id, clinical_info_id
         FROM medications
         WHERE user_id = ?
         ORDER BY updated_at DESC, id DESC
@@ -139,12 +158,14 @@ public class MedicationService {
   public MedicationDtos.MedicationItem createMedication(MedicationDtos.MedicationSaveRequest request) {
     long userId = CurrentUser.requireUserId();
     validateMedicationName(request.name());
+    String medicineType = resolveMedicineType(request.medicineType());
     jdbcTemplate.update(
         """
         INSERT INTO medications
           (user_id, name, alias, dosage_value, dosage_unit, usage_label, notes, photo_url,
-           enable_ocr, enable_yolo, ocr_endpoint, yolo_endpoint, enabled, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+           enable_ocr, enable_yolo, ocr_endpoint, yolo_endpoint, enabled,
+           medicine_type, formula_id, clinical_info_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
         """,
         userId,
         request.name().trim(),
@@ -158,22 +179,58 @@ public class MedicationService {
         truthy(request.enableYolo()),
         stringValue(request.ocrEndpoint()),
         stringValue(request.yoloEndpoint()),
-        truthyDefault(request.enabled(), true)
+        truthyDefault(request.enabled(), true),
+        medicineType,
+        request.formulaId(),
+        request.clinicalInfoId()
     );
     Long medicationId = jdbcTemplate.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
     replaceMedicationReminders(userId, medicationId == null ? 0L : medicationId, request.reminders());
     return getMedicationById(userId, medicationId == null ? 0L : medicationId);
   }
 
+  /** 根据中药方剂创建一条 medications 记录（medicine_type='formula'，formula_id 关联）。 */
+  @Transactional
+  public MedicationDtos.MedicationItem createFormulaMedication(long userId, long formulaId) {
+    var formula = tcmFormulaService.getFormula(formulaId);
+    jdbcTemplate.update(
+        """
+        INSERT INTO medications
+          (user_id, name, alias, dosage_value, dosage_unit, usage_label, notes, photo_url,
+           enable_ocr, enable_yolo, ocr_endpoint, yolo_endpoint, enabled,
+           medicine_type, formula_id, clinical_info_id, created_at, updated_at)
+        VALUES (?, ?, '', 1, '剂', '饭后', '', '', 0, 0, '', '', 1, 'formula', ?, NULL, NOW(), NOW())
+        """,
+        userId,
+        formula.name() + "（方剂）",
+        formulaId
+    );
+    Long medicationId = jdbcTemplate.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
+    return getMedicationById(userId, medicationId == null ? 0L : medicationId);
+  }
+
+  private String resolveMedicineType(String input) {
+    if (input == null || input.trim().isBlank()) {
+      return "western";
+    }
+    String normalized = input.trim().toLowerCase();
+    return switch (normalized) {
+      case "tcm", "formula", "western" -> normalized;
+      default -> "western";
+    };
+  }
+
   @Transactional
   public MedicationDtos.MedicationItem updateMedication(long id, MedicationDtos.MedicationSaveRequest request) {
     long userId = CurrentUser.requireUserId();
     validateMedicationName(request.name());
+    String medicineType = resolveMedicineType(request.medicineType());
     int updated = jdbcTemplate.update(
         """
         UPDATE medications
         SET name = ?, alias = ?, dosage_value = ?, dosage_unit = ?, usage_label = ?, notes = ?, photo_url = ?,
-            enable_ocr = ?, enable_yolo = ?, ocr_endpoint = ?, yolo_endpoint = ?, enabled = ?, updated_at = NOW()
+            enable_ocr = ?, enable_yolo = ?, ocr_endpoint = ?, yolo_endpoint = ?, enabled = ?,
+            medicine_type = ?, formula_id = ?, clinical_info_id = ?, updated_at = NOW()
         WHERE id = ? AND user_id = ?
         """,
         request.name().trim(),
@@ -188,6 +245,9 @@ public class MedicationService {
         stringValue(request.ocrEndpoint()),
         stringValue(request.yoloEndpoint()),
         truthyDefault(request.enabled(), true),
+        medicineType,
+        request.formulaId(),
+        request.clinicalInfoId(),
         id,
         userId
     );
@@ -260,7 +320,11 @@ public class MedicationService {
       throw new ApiException(HttpStatus.BAD_REQUEST, "请先上传药盒图片");
     }
     if (customMedicationRecognizeUrl.isBlank()) {
-      throw new ApiException(HttpStatus.NOT_IMPLEMENTED, "未配置 CUSTOM_MEDICATION_RECOGNIZE_URL");
+      // Keep the public custom-model route usable in local/demo deployments.
+      // The vertical vision model still provides a structured result when the
+      // optional dedicated service is not configured.
+      log.info("[Medication] CUSTOM_MEDICATION_RECOGNIZE_URL 未配置，fallback 到垂域视觉模型");
+      return recognizeByModel(files);
     }
 
     HttpHeaders headers = new HttpHeaders();
@@ -289,7 +353,8 @@ public class MedicationService {
     } catch (IOException exception) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "药品图片读取失败");
     } catch (Exception exception) {
-      throw new ApiException(HttpStatus.BAD_GATEWAY, "自定义药品识别接口调用失败");
+      log.warn("[Medication] 自定义识别接口调用失败，fallback 到垂域视觉模型: {}", exception.getMessage());
+      return recognizeByModel(files);
     }
   }
 
@@ -302,11 +367,11 @@ public class MedicationService {
     }
 
     List<Map<String, Object>> content = new ArrayList<>();
-    content.add(Map.of("type", "text", "text", MEDICATION_RECOGNITION_USER_PROMPT));
+    content.add(Map.of("type", "text", "text", promptTemplateService.render("medication.recognition_user", Map.of())));
     content.addAll(dashScopeService.toImageBlocks(normalizedFiles));
 
     JsonNode payload = dashScopeService.requestJson(
-        MEDICATION_RECOGNITION_SYSTEM_PROMPT,
+        promptTemplateService.render("medication.recognition_system", Map.of()),
         content,
         dashScopeService.visionModel(),
         0.1,
@@ -426,11 +491,11 @@ public class MedicationService {
 
     // Step 1: DashScope Vision — OCR + initial structuring
     List<Map<String, Object>> content = new ArrayList<>();
-    content.add(Map.of("type", "text", "text", MEDICATION_RECOGNITION_USER_PROMPT));
+    content.add(Map.of("type", "text", "text", promptTemplateService.render("medication.recognition_user", Map.of())));
     content.addAll(dashScopeService.toImageBlocks(normalizedFiles));
 
     JsonNode payload = dashScopeService.requestJson(
-        MEDICATION_RECOGNITION_SYSTEM_PROMPT,
+        promptTemplateService.render("medication.recognition_system", Map.of()),
         content,
         dashScopeService.visionModel(),
         0.1,
@@ -799,7 +864,8 @@ public class MedicationService {
       Map<String, Object> row = jdbcTemplate.queryForMap(
           """
           SELECT id, name, alias, dosage_value, dosage_unit, usage_label, notes, photo_url,
-                 enable_ocr, enable_yolo, ocr_endpoint, yolo_endpoint, enabled
+                 enable_ocr, enable_yolo, ocr_endpoint, yolo_endpoint, enabled,
+                 medicine_type, formula_id, clinical_info_id
           FROM medications
           WHERE id = ? AND user_id = ?
           """,
@@ -845,8 +911,24 @@ public class MedicationService {
         stringValue(row.get("ocr_endpoint")),
         stringValue(row.get("yolo_endpoint")),
         boolValue(row.get("enabled")),
-        reminders
+        reminders,
+        stringValue(row.get("medicine_type")),
+        nullableLong(row.get("formula_id")),
+        nullableLong(row.get("clinical_info_id"))
     );
+  }
+
+  private Long nullableLong(Object value) {
+    if (value == null) return null;
+    if (value instanceof Number number) {
+      long lv = number.longValue();
+      return lv == 0L ? null : lv;
+    }
+    try {
+      return Long.parseLong(String.valueOf(value));
+    } catch (NumberFormatException e) {
+      return null;
+    }
   }
 
   private void replaceMedicationReminders(long userId, long medicationId, List<MedicationDtos.MedicationReminderInput> reminders) {
@@ -885,7 +967,8 @@ public class MedicationService {
           """
           UPDATE medications
           SET name = ?, alias = ?, dosage_value = ?, dosage_unit = ?, usage_label = ?, notes = ?, photo_url = ?,
-              enable_ocr = ?, enable_yolo = ?, ocr_endpoint = ?, yolo_endpoint = ?, enabled = ?, updated_at = NOW()
+              enable_ocr = ?, enable_yolo = ?, ocr_endpoint = ?, yolo_endpoint = ?, enabled = ?,
+              medicine_type = 'western', updated_at = NOW()
           WHERE id = ? AND user_id = ?
           """,
           requiredName(medication.name()),
@@ -909,8 +992,9 @@ public class MedicationService {
         """
         INSERT INTO medications
           (user_id, name, alias, dosage_value, dosage_unit, usage_label, notes, photo_url,
-           enable_ocr, enable_yolo, ocr_endpoint, yolo_endpoint, enabled, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+           enable_ocr, enable_yolo, ocr_endpoint, yolo_endpoint, enabled,
+           medicine_type, formula_id, clinical_info_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'western', NULL, NULL, NOW(), NOW())
         """,
         userId,
         requiredName(medication.name()),
@@ -1207,54 +1291,171 @@ public class MedicationService {
     if (name.isBlank()) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "请输入药品名称。");
     }
+    String notes = sanitizeText(request.notes());
 
-    String systemPrompt = """
-        你是药学助手。请根据药品名称，生成结构化药学解释。
-        只返回 JSON，不要输出 Markdown。
-        固定结构为：
-        {"clinicalParse":"","elderFriendlyExplanation":"","warnings":["",""]}
-        约束：
-        1. clinicalParse：用中文列出药品通用名、适应症、用法用量、常见不良反应、禁忌，格式为结构化文本。
-        2. elderFriendlyExplanation：用简单易懂的中文，60字以内，适合老年人阅读，说明这个药治什么、怎么吃、注意什么。
-        3. warnings：返回 2-3 条最重要的中文用药提醒。
-        4. 如果无法确定具体药品信息，请说明信息来源不足，不要编造。
-        """;
+    // === Layer 1: 答案模板（高频药品秒级响应，0 LLM 调用、0 RAG 检索） ===
+    try {
+      var templated = answerTemplateService.tryAnswer(name, "explain_medication");
+      if (templated.isPresent()) {
+        String text = templated.get();
+        log.info("[MedicationExplain] 模板命中: drug='{}'", truncate(name, 50));
+        return new MedicationDtos.MedicationExplainResponse(
+            text,
+            "这是常见药品，建议按药品说明书服用，如有疑问请咨询药师。",
+            List.of("请遵医嘱用药，如有不适及时就医")
+        );
+      }
+    } catch (Exception e) {
+      log.warn("[MedicationExplain] 模板查询失败，跳过: {}", e.getMessage());
+    }
+
+    // === Layer 2: LLM 缓存命中检查（0 LLM 调用） ===
+    String contextHash = buildMedicationContextHash(name, notes);
+    String promptKey = buildMedicationPromptKey(name, notes);
+    try {
+      var cached = llmCacheService.getExact("explain_medication", promptKey, contextHash);
+      if (cached.isPresent()) {
+        try {
+          JsonNode payload = objectMapper.readTree(cached.get());
+          String clinical = payload.path("clinicalParse").asText("");
+          String elder = payload.path("elderFriendlyExplanation").asText("");
+          if (!clinical.isBlank() || !elder.isBlank()) {
+            List<String> warnings = parseWarnings(payload.path("warnings"));
+            log.info("[MedicationExplain] 缓存命中: drug='{}'", truncate(name, 50));
+            return new MedicationDtos.MedicationExplainResponse(
+                clinical.isBlank() ? "暂无详细信息" : clinical,
+                elder.isBlank() ? "请咨询医生或药师了解此药的详细用法。" : elder,
+                warnings.isEmpty() ? List.of("请遵医嘱用药，如有不适及时就医") : warnings
+            );
+          }
+        } catch (Exception parseEx) {
+          log.debug("[MedicationExplain] 缓存 JSON 解析失败，继续走正常流程: {}", parseEx.getMessage());
+        }
+      }
+    } catch (Exception e) {
+      log.warn("[MedicationExplain] 缓存查询失败，跳过: {}", e.getMessage());
+    }
+
+    // === Layer 3: RAG 检索药品知识（docType="drug_label"，失败 fallback 到空） ===
+    String knowledgeBlock = retrieveMedicationKnowledge(name);
+
+    // === Layer 4: LLM 调用（注入知识块） ===
+    String systemPrompt = promptTemplateService.render("medication.explain_system", Map.of(
+        "drug_name", name,
+        "ingredients", "",
+        "indications", "",
+        "interactions", "",
+        "ddi_rules", knowledgeBlock
+    ));
 
     String userContent = "药品名称：" + name;
-    String notes = sanitizeText(request.notes());
     if (!notes.isBlank()) {
       userContent += "\n补充说明：" + notes;
     }
 
+    JsonNode payload;
     try {
-      JsonNode payload = dashScopeService.requestJson(
+      payload = dashScopeService.requestJson(
           systemPrompt, userContent, dashScopeService.chatModel(), 0.3, "药物解释"
       );
-
-      String clinical = payload.path("clinicalParse").asText("暂无详细信息");
-      String elder = payload.path("elderFriendlyExplanation").asText("请咨询医生或药师了解此药的详细用法。");
-
-      List<String> warnings = new ArrayList<>();
-      JsonNode warningsNode = payload.path("warnings");
-      if (warningsNode.isArray()) {
-        for (JsonNode w : warningsNode) {
-          String text = w.asText("").trim();
-          if (!text.isBlank()) warnings.add(text);
-        }
-      }
-      if (warnings.isEmpty()) {
-        warnings.add("请遵医嘱用药，如有不适及时就医");
-      }
-
-      return new MedicationDtos.MedicationExplainResponse(clinical, elder, warnings);
     } catch (ApiException e) {
-      // LLM unavailable — return fallback
+      log.warn("[MedicationExplain] LLM 调用失败，返回 fallback: {}", e.getMessage());
       return new MedicationDtos.MedicationExplainResponse(
           "暂无法获取详细药学信息，请查看药品说明书或咨询药师。",
           "这个药的详细信息暂时查不到，建议看药盒上的说明或问医生。",
           List.of("请遵医嘱用药，如有不适及时就医")
       );
     }
+
+    String clinical = payload.path("clinicalParse").asText("暂无详细信息");
+    String elder = payload.path("elderFriendlyExplanation").asText("请咨询医生或药师了解此药的详细用法。");
+
+    List<String> warnings = new ArrayList<>();
+    JsonNode warningsNode = payload.path("warnings");
+    if (warningsNode.isArray()) {
+      for (JsonNode w : warningsNode) {
+        String text = w.asText("").trim();
+        if (!text.isBlank()) warnings.add(text);
+      }
+    }
+    if (warnings.isEmpty()) {
+      warnings.add("请遵医嘱用药，如有不适及时就医");
+    }
+
+    MedicationDtos.MedicationExplainResponse response =
+        new MedicationDtos.MedicationExplainResponse(clinical, elder, warnings);
+
+    // === Layer 5: 写缓存（best-effort） ===
+    try {
+      var cachePayload = objectMapper.createObjectNode();
+      cachePayload.put("clinicalParse", clinical);
+      cachePayload.put("elderFriendlyExplanation", elder);
+      cachePayload.set("warnings", objectMapper.valueToTree(warnings));
+      llmCacheService.put("explain_medication", promptKey, contextHash,
+          objectMapper.writeValueAsString(cachePayload), CACHE_TTL, true);
+    } catch (Exception e) {
+      log.debug("[MedicationExplain] 写缓存失败: {}", e.getMessage());
+    }
+
+    return response;
+  }
+
+  /**
+   * RAG 检索药品相关知识（docType="drug_label"）；失败返回空字符串，不阻塞主流程。
+   */
+  private String retrieveMedicationKnowledge(String drugName) {
+    if (drugName == null || drugName.isBlank()) return "";
+    try {
+      List<RagDtos.RagSearchHit> hits = ragSearchService.search(drugName, "drug_label", 3);
+      if (hits == null || hits.isEmpty()) return "";
+      StringBuilder sb = new StringBuilder();
+      for (RagDtos.RagSearchHit hit : hits) {
+        if (hit.chunkText() != null && !hit.chunkText().isBlank()) {
+          sb.append("- ").append(hit.chunkText().trim()).append("\n");
+        }
+      }
+      return sb.toString().trim();
+    } catch (Exception e) {
+      log.debug("[MedicationExplain] RAG 检索失败: {}", e.getMessage());
+      return "";
+    }
+  }
+
+  /**
+   * 构造 prompt key：基于药品名 + 备注，用于 LLM 缓存的精确匹配键。
+   */
+  private String buildMedicationPromptKey(String name, String notes) {
+    return "drug:" + name + "|notes:" + (notes == null ? "" : notes);
+  }
+
+  /**
+   * 构造 contextHash：当前预留为常量（药品解释不依赖用户上下文），未来可扩展为用户用药列表。
+   */
+  private String buildMedicationContextHash(String name, String notes) {
+    try {
+      String raw = "medication|" + name + "|" + (notes == null ? "" : notes);
+      MessageDigest md = MessageDigest.getInstance("SHA-256");
+      byte[] hash = md.digest(raw.getBytes(StandardCharsets.UTF_8));
+      return HexFormat.of().formatHex(hash);
+    } catch (Exception e) {
+      return "";
+    }
+  }
+
+  private List<String> parseWarnings(JsonNode warningsNode) {
+    List<String> warnings = new ArrayList<>();
+    if (warningsNode != null && warningsNode.isArray()) {
+      for (JsonNode w : warningsNode) {
+        String text = w.asText("").trim();
+        if (!text.isBlank()) warnings.add(text);
+      }
+    }
+    return warnings;
+  }
+
+  private String truncate(String text, int maxLen) {
+    if (text == null) return "";
+    return text.length() <= maxLen ? text : text.substring(0, maxLen) + "…";
   }
 
   public Map<String, Object> confirmIntake(MedicationDtos.MedicationIntakeConfirmRequest request) {

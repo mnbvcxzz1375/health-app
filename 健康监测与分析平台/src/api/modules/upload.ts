@@ -44,6 +44,35 @@ export type AnalyzeSaveResponse = {
   rehabPlanDraft: RehabPlanDraft
 }
 
+// ===== 骨龄评估 =====
+
+export type BoneAgeResult = {
+  estimatedAgeYears: number | null
+  confidence: number | null
+  growthPlateStage: string
+  malformedIndicators: string[]
+  disclaimer: string
+}
+
+export type BoneAgeEstimateResponse = {
+  taskId: string
+  type: 'bone'
+  source: 'local_model' | 'llm_fallback' | string
+  result: BoneAgeResult
+  estimatedAt?: string
+}
+
+export type BoneAgeTaskRecord = {
+  taskId: string
+  imageName: string
+  estimatedAge: number | null
+  confidence: number | null
+  growthPlateStage: string
+  indicators: string[]
+  source: string
+  createdAtIso: string
+}
+
 function buildMockRehabPlanDraft(taskId: string, report: AnalyzeReport): RehabPlanDraft {
   const db = getMockDb()
 
@@ -113,7 +142,6 @@ export async function createAnalyzeTask(payload: FormData): Promise<AnalyzeTask>
   }
 
   const { data } = await http.post<AnalyzeTask>('/analyze/tasks', payload, {
-    headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 120_000,
   })
   return data
@@ -201,4 +229,96 @@ export async function getSavedAnalyzeReports(): Promise<SavedAnalyzeReport[]> {
 
   const { data } = await http.get<SavedAnalyzeReport[]>('/analyze/reports')
   return data
+}
+
+// ===== 骨龄评估 API =====
+
+/**
+ * 上传 X 光图片进行骨龄评估。
+ * 调用 POST /api/bone-age/estimate（不走 /api/analyze/tasks/custom-model，
+ * 因为骨龄评估是同步返回完整结果的，无需轮询）。
+ */
+export async function estimateBoneAge(file: File): Promise<BoneAgeEstimateResponse> {
+  if (env.useDevMock) {
+    return mockEstimateBoneAge(file)
+  }
+
+  const formData = new FormData()
+  formData.append('file', file)
+
+  // 不要手动设置 Content-Type，让 Axios 自动生成带 boundary 的 multipart/form-data
+  const { data } = await http.post<BoneAgeEstimateResponse>('/bone-age/estimate', formData, {
+    timeout: 120_000,
+  })
+  return data
+}
+
+/** 查询最近骨龄评估记录（最多 50 条） */
+export async function listRecentBoneAgeTasks(limit = 10): Promise<BoneAgeTaskRecord[]> {
+  if (env.useDevMock) {
+    return mockListRecentBoneAgeTasks(limit)
+  }
+
+  const { data } = await http.get<BoneAgeTaskRecord[]>('/bone-age/recent', {
+    params: { limit },
+  })
+  return data
+}
+
+// ===== 骨龄评估 Mock =====
+
+const mockBoneAgeRecords: BoneAgeTaskRecord[] = []
+
+function mockEstimateBoneAge(file: File): BoneAgeEstimateResponse {
+  // Keep the development fixture deterministic; it is never used in production.
+  const age = 10.4
+  const confidence = 0.86
+
+  const stageMap: Array<[number, string]> = [
+    [2, '婴幼儿期 (<2)'],
+    [6, '儿童早期 (2-6)'],
+    [10, '儿童晚期 (6-10)'],
+    [13, '青春期前期 (10-13)'],
+    [16, '青春期 (13-16)'],
+    [18, '青春期后期 (16-18)'],
+    [Number.POSITIVE_INFINITY, '骨骺闭合期 (≥18)'],
+  ]
+  const stage = stageMap.find(([threshold]) => age < threshold)?.[1] ?? '未知'
+
+  const indicators: string[] = ['开发模式示例结果，请使用真实骨龄服务重新评估']
+
+  const result: BoneAgeResult = {
+    estimatedAgeYears: age,
+    confidence,
+    growthPlateStage: stage,
+    malformedIndicators: indicators,
+    disclaimer:
+      '本结果由 AI 模型自动评估，仅供参考，不能替代专业医师的临床判断。骨龄评估受拍摄角度、光质、个体差异等因素影响，请以执业医师出具的报告为准。',
+  }
+
+  const taskId = `bone_mock_${String(mockBoneAgeRecords.length + 1).padStart(4, '0')}`
+
+  // 写入历史记录（用于 listRecentBoneAgeTasks mock）
+  mockBoneAgeRecords.unshift({
+    taskId,
+    imageName: file.name,
+    estimatedAge: age,
+    confidence,
+    growthPlateStage: stage,
+    indicators,
+    source: 'dev_fixture',
+    createdAtIso: new Date().toISOString(),
+  })
+
+  return {
+    taskId,
+    type: 'bone',
+    source: 'dev_fixture',
+    result,
+    estimatedAt: new Date().toISOString(),
+  }
+}
+
+function mockListRecentBoneAgeTasks(limit: number): BoneAgeTaskRecord[] {
+  return mockBoneAgeRecords.slice(0, limit)
 }

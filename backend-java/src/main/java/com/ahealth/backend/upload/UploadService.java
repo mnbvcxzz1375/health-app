@@ -1,21 +1,32 @@
 package com.ahealth.backend.upload;
 
 import com.ahealth.backend.ai.DashScopeService;
+import com.ahealth.backend.ai.LlmCacheService;
+import com.ahealth.backend.ai.PromptTemplateService;
+import com.ahealth.backend.boneage.BoneAgeService;
 import com.ahealth.backend.common.ApiException;
 import com.ahealth.backend.common.CurrentUser;
 import com.ahealth.backend.common.JsonSupport;
 import com.ahealth.backend.common.TimeFormats;
+import com.ahealth.backend.rag.RagDtos;
+import com.ahealth.backend.rag.RagSearchService;
 import com.ahealth.backend.rehab.RehabDtos;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -24,41 +35,33 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class UploadService {
-  private static final String UPLOAD_ANALYSIS_SYSTEM_PROMPT = """
-      你是中文健康资料分析助手。
-      你只能基于用户上传的文字、图片和文件内容做健康管理辅助分析，不允许编造不存在的信息。
-      你不能替代医生诊断，不要输出 Markdown，不要输出代码块。
-      请只返回 JSON，固定结构为：
-      {"title":"","summary":"","riskLevel":"","points":["","",""],"advice":["","",""],"rehabFocus":"","followUp":["","",""],"caution":""}
-      约束：
-      1. riskLevel 只能是 低风险、中等风险、高风险 之一。
-      2. points、advice、followUp 每项返回 2 到 4 条中文短句。
-      3. rehabFocus 返回一句中文短语，用于后续生成康复计划。
-      4. 只基于可见资料总结，不得输出“无法查看但猜测”的内容。
-      """;
-  private static final String REHAB_PLAN_DRAFT_SYSTEM_PROMPT = """
-      你是中文康复计划生成助手。
-      你的输入是最近 3 份已经完成结构化分析的健康报告 JSON，以及当前动作库。
-      请只输出 JSON，不要输出 Markdown，不要输出代码块。
-      固定结构为：
-      {"summary":{"focus":"","frequency":"","duration":"","intensity":""},"exercises":[{"mode":"existing","name":"","category":"","duration":"","level":"基础","minutes":0,"steps":[""],"caution":"","focus":"","benefits":[""],"videoMinutes":0}],"reminder":{"time":"08:00","days":["mon","wed","fri"],"pushEnabled":true}}
-      约束：
-      1. exercises 必须返回 4 个动作。
-      2. mode 只能是 existing 或 generated。
-      3. level 只能是 基础 或 进阶。
-      4. days 只能使用 mon,tue,wed,thu,fri,sat,sun。
-      5. 如果动作命中现有动作库，mode 必须为 existing，name 必须与动作库中文名完全一致。
-      6. 如果报告有冲突，优先较新的报告，训练负荷按更保守原则收敛。
-      """;
+
+  private static final Logger log = LoggerFactory.getLogger(UploadService.class);
+  private static final Duration CACHE_TTL = Duration.ofHours(336); // 14 天（康复计划相对稳定）
 
   private final JdbcTemplate jdbcTemplate;
   private final JsonSupport jsonSupport;
   private final DashScopeService dashScopeService;
+  private final PromptTemplateService promptTemplateService;
+  private final LlmCacheService llmCacheService;
+  private final RagSearchService ragSearchService;
+  private final ObjectMapper objectMapper;
+  private final BoneAgeService boneAgeService;
 
-  public UploadService(JdbcTemplate jdbcTemplate, JsonSupport jsonSupport, DashScopeService dashScopeService) {
+  public UploadService(JdbcTemplate jdbcTemplate, JsonSupport jsonSupport, DashScopeService dashScopeService,
+      PromptTemplateService promptTemplateService,
+      LlmCacheService llmCacheService,
+      RagSearchService ragSearchService,
+      ObjectMapper objectMapper,
+      BoneAgeService boneAgeService) {
     this.jdbcTemplate = jdbcTemplate;
     this.jsonSupport = jsonSupport;
     this.dashScopeService = dashScopeService;
+    this.promptTemplateService = promptTemplateService;
+    this.llmCacheService = llmCacheService;
+    this.ragSearchService = ragSearchService;
+    this.objectMapper = objectMapper;
+    this.boneAgeService = boneAgeService;
   }
 
   @Transactional
@@ -98,8 +101,40 @@ public class UploadService {
     return new UploadDtos.AnalyzeTaskResponse(taskId);
   }
 
-  public UploadDtos.AnalyzeTaskResponse createTaskByCustomModel(String type, String text, MultipartFile[] files) {
-    throw new ApiException(HttpStatus.NOT_IMPLEMENTED, "自定义上传分析模型尚未接入。");
+  /**
+   * 自定义模型上传分析路由：
+   * - type="bone" → 骨龄评估（BoneAgeService.estimate）
+   * - 其他类型 → 复用结构化上传分析（source=llm_fallback），不再返回 501
+   *
+   * 注意：骨龄评估走单独的 bone_age_tasks 表，不复用 analyze_tasks。
+   * 返回的 CustomModelTaskResponse 同时包含 taskId 和（bone 情况下）完整结果，
+   * 前端可直接渲染，无需二次查询。
+   */
+  @Transactional
+  public UploadDtos.CustomModelTaskResponse createTaskByCustomModel(String type, String text, MultipartFile[] files) {
+    String normalizedType = normalizeType(type);
+    MultipartFile[] normalizedFiles = normalizeFiles(files);
+
+    if ("bone".equals(normalizedType)) {
+      if (normalizedFiles.length == 0) {
+        throw new ApiException(HttpStatus.BAD_REQUEST, "骨龄评估需要上传 X 光图片。");
+      }
+      BoneAgeService.BoneAgeEstimateResponse estimate = boneAgeService.estimate(normalizedFiles[0]);
+      return new UploadDtos.CustomModelTaskResponse(
+          estimate.taskId(),
+          "bone",
+          estimate.source(),
+          estimate.result(),
+          null
+      );
+    }
+
+    // Older clients use this endpoint for the structured health-analysis
+    // types. Reuse the persisted analysis path and expose the fallback source.
+    UploadDtos.AnalyzeTaskResponse task = createTask(normalizedType, text, normalizedFiles);
+    UploadDtos.AnalyzeResultResponse result = getTask(task.taskId());
+    return new UploadDtos.CustomModelTaskResponse(
+        task.taskId(), normalizedType, "llm_fallback", null, result.report());
   }
 
   public UploadDtos.AnalyzeResultResponse getTask(String taskId) {
@@ -206,7 +241,7 @@ public class UploadService {
     }
 
     JsonNode payload = dashScopeService.requestJson(
-        UPLOAD_ANALYSIS_SYSTEM_PROMPT,
+        promptTemplateService.render("upload.analysis_system", Map.of()),
         content,
         dashScopeService.visionModel(),
         0.2,
@@ -248,14 +283,125 @@ public class UploadService {
         %s
         """.formatted(jsonSupport.write(reportPayload), jsonSupport.write(exerciseRows));
 
+    // === Layer 2: LLM 缓存命中检查（0 LLM 调用） ===
+    String promptKey = buildRehabPromptKey(reportPayload, exerciseRows);
+    String contextHash = buildRehabContextHash(userId);
+    try {
+      var cached = llmCacheService.getExact("rehab_plan_draft", promptKey, contextHash);
+      if (cached.isPresent()) {
+        try {
+          JsonNode payload = objectMapper.readTree(cached.get());
+          RehabDtos.RehabPlanDraft draft = normalizeRehabPlanDraft(payload,
+              reportRows.stream().map(row -> stringValue(row.get("id"))).toList());
+          log.info("[RehabPlan] 缓存命中: userId={} reports={}", userId, reportRows.size());
+          return draft;
+        } catch (Exception parseEx) {
+          log.debug("[RehabPlan] 缓存 JSON 解析失败，继续走正常流程: {}", parseEx.getMessage());
+        }
+      }
+    } catch (Exception e) {
+      log.warn("[RehabPlan] 缓存查询失败，跳过: {}", e.getMessage());
+    }
+
+    // === Layer 3: RAG 检索康复指导知识（docType="rehab_guide"） ===
+    String rehabKnowledge = retrieveRehabKnowledge(reportPayload);
+
+    // === Layer 4: LLM 调用（注入知识块到 ddi_rules / 上下文） ===
+    String systemPrompt = promptTemplateService.render("upload.rehab_plan_draft_system", Map.of(
+        "recent_reports", jsonSupport.write(reportPayload),
+        "exercise_library", jsonSupport.write(exerciseRows),
+        "bmi", "",
+        "target_calories", rehabKnowledge
+    ));
+
     JsonNode payload = dashScopeService.requestJson(
-        REHAB_PLAN_DRAFT_SYSTEM_PROMPT,
+        systemPrompt,
         content,
         dashScopeService.chatModel(),
         0.2,
         "康复计划生成"
     );
-    return normalizeRehabPlanDraft(payload, reportRows.stream().map(row -> stringValue(row.get("id"))).toList());
+    RehabDtos.RehabPlanDraft draft = normalizeRehabPlanDraft(payload,
+        reportRows.stream().map(row -> stringValue(row.get("id"))).toList());
+
+    // === Layer 5: 写缓存（best-effort） ===
+    try {
+      llmCacheService.put("rehab_plan_draft", promptKey, contextHash,
+          objectMapper.writeValueAsString(payload), CACHE_TTL, true);
+    } catch (Exception e) {
+      log.debug("[RehabPlan] 写缓存失败: {}", e.getMessage());
+    }
+
+    return draft;
+  }
+
+  /**
+   * 基于报告内容 + 动作库摘要构造缓存 promptKey。
+   */
+  private String buildRehabPromptKey(List<Map<String, Object>> reportPayload, List<Map<String, Object>> exerciseRows) {
+    StringBuilder sb = new StringBuilder("rehab:");
+    for (Map<String, Object> r : reportPayload) {
+      sb.append(r.getOrDefault("taskId", "")).append("|")
+          .append(r.getOrDefault("type", "")).append("|");
+    }
+    sb.append("|exercises:").append(exerciseRows.size());
+    return sb.toString();
+  }
+
+  /**
+   * 构造 contextHash：基于 userId（康复计划与用户强相关）。
+   */
+  private String buildRehabContextHash(long userId) {
+    try {
+      String raw = "rehab|user|" + userId;
+      MessageDigest md = MessageDigest.getInstance("SHA-256");
+      byte[] hash = md.digest(raw.getBytes(StandardCharsets.UTF_8));
+      return HexFormat.of().formatHex(hash);
+    } catch (Exception e) {
+      return "";
+    }
+  }
+
+  /**
+   * RAG 检索康复指导知识（docType="rehab_guide"）；失败返回空字符串。
+   * 查询关键词基于最近报告的 rehabFocus + summary。
+   */
+  private String retrieveRehabKnowledge(List<Map<String, Object>> reportPayload) {
+    try {
+      String query = extractRehabQuery(reportPayload);
+      if (query.isBlank()) return "";
+      List<RagDtos.RagSearchHit> hits = ragSearchService.search(query, "rehab_guide", 5);
+      if (hits == null || hits.isEmpty()) return "";
+      StringBuilder sb = new StringBuilder();
+      for (RagDtos.RagSearchHit hit : hits) {
+        if (hit.chunkText() != null && !hit.chunkText().isBlank()) {
+          sb.append("- ").append(hit.chunkText().trim()).append("\n");
+        }
+      }
+      return sb.toString().trim();
+    } catch (Exception e) {
+      log.debug("[RehabPlan] RAG 检索失败: {}", e.getMessage());
+      return "";
+    }
+  }
+
+  /** 从报告 payload 中提取康复相关查询关键词。 */
+  private String extractRehabQuery(List<Map<String, Object>> reportPayload) {
+    StringBuilder sb = new StringBuilder();
+    for (Map<String, Object> r : reportPayload) {
+      Object reportObj = r.get("report");
+      if (reportObj instanceof UploadDtos.AnalyzeReport report) {
+        String focus = report.rehabFocus();
+        if (focus != null && !focus.isBlank()) {
+          sb.append(focus).append(" ");
+        }
+        String summary = report.summary();
+        if (summary != null && !summary.isBlank()) {
+          sb.append(summary).append(" ");
+        }
+      }
+    }
+    return sb.toString().trim();
   }
 
   private UploadDtos.AnalyzeReport normalizeReport(JsonNode payload, String type) {
@@ -383,7 +529,7 @@ public class UploadService {
 
   private String normalizeType(String type) {
     return switch (type == null ? "" : type.trim()) {
-      case "image", "lab", "text", "symptom" -> type.trim();
+      case "image", "lab", "text", "symptom", "bone" -> type.trim();
       default -> "text";
     };
   }
@@ -393,6 +539,7 @@ public class UploadService {
       case "image" -> "影像资料";
       case "lab" -> "化验报告";
       case "symptom" -> "症状描述";
+      case "bone" -> "骨龄评估";
       default -> "文字报告";
     };
   }

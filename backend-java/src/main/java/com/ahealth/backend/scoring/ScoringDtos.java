@@ -11,7 +11,9 @@ public final class ScoringDtos {
       List<CategoryScore> categoryScores,
       List<TopRisk> topRisks,
       List<String> recommendedActions,
-      String summary
+      String summary,
+      String dataQuality,
+      List<String> dataWarnings
   ) {}
 
   public record CategoryScore(
@@ -24,7 +26,8 @@ public final class ScoringDtos {
       String riskNote,
       String attentionType,
       double weight,
-      String algorithmNote
+      String algorithmNote,
+      boolean dataAvailable
   ) {}
 
   public record TopRisk(

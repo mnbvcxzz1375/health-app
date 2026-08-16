@@ -7,7 +7,7 @@ spring:
   datasource:
     url: ${POSTURE_DB_URL:jdbc:mysql://127.0.0.1:3306/health_monitoring?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=utf8}
     username: ${POSTURE_DB_USERNAME:root}
-    password: ${POSTURE_DB_PASSWORD:123456}
+    password: ${POSTURE_DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
   redis:
     url: ${POSTURE_REDIS_URL:redis://127.0.0.1:6379/0}

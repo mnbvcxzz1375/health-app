@@ -1,4 +1,4 @@
-﻿import type { RouteRecordRaw } from 'vue-router'
+import type { RouteRecordRaw } from 'vue-router'
 
 export const routes: RouteRecordRaw[] = [
   {
@@ -25,8 +25,13 @@ export const routes: RouteRecordRaw[] = [
   },
   {
     path: '/monitor',
-    name: 'monitor',
-    redirect: '/home',
+    redirect: '/monitor/hr',
+  },
+  {
+    path: '/monitor/:metric',
+    name: 'monitor-detail',
+    component: () => import('@/modules/monitor/views/MonitorPage.vue'),
+    meta: { title: '监测趋势', requiresAuth: true },
   },
   {
     path: '/upload',
@@ -38,13 +43,49 @@ export const routes: RouteRecordRaw[] = [
     path: '/medication',
     name: 'medication',
     component: () => import('@/modules/medication/views/MedicationPage.vue'),
-    meta: { title: '用药提醒', requiresAuth: true },
+    meta: { title: '用药管理', requiresAuth: true },
   },
   {
     path: '/medication/alarm',
     name: 'medication-alarm',
     component: () => import('@/modules/medication/views/MedicationAlarmPage.vue'),
     meta: { title: '闹钟设置', requiresAuth: true },
+  },
+  {
+    path: '/devices',
+    name: 'devices',
+    component: () => import('@/modules/device/views/DeviceHubPage.vue'),
+    meta: { title: '设备聚合', requiresAuth: true },
+  },
+  {
+    path: '/devices/brands',
+    name: 'devices-brands',
+    component: () => import('@/modules/device/views/BrandAuthPage.vue'),
+    meta: { title: '品牌授权', requiresAuth: true },
+  },
+  {
+    path: '/devices/metric/:metric',
+    name: 'devices-metric-route',
+    component: () => import('@/modules/device/views/MetricRoutePage.vue'),
+    meta: { title: '数据路由', requiresAuth: true },
+  },
+  {
+    path: '/devices/oauth/callback/:provider',
+    name: 'devices-oauth-callback',
+    component: () => import('@/modules/device/views/OAuthCallbackPage.vue'),
+    meta: { title: '授权回调', requiresAuth: false },
+  },
+  {
+    path: '/devices/legacy',
+    name: 'devices-legacy',
+    component: () => import('@/modules/device/views/DeviceManagePage.vue'),
+    meta: { title: '设备管理（旧版）', requiresAuth: true },
+  },
+  {
+    path: '/devices/sdk-keys',
+    name: 'devices-sdk-keys',
+    component: () => import('@/modules/device/views/SdkKeysPage.vue'),
+    meta: { title: '开放 SDK 密钥', requiresAuth: true },
   },
   {
     path: '/rehab',
@@ -69,6 +110,72 @@ export const routes: RouteRecordRaw[] = [
     name: 'rehab-reminder',
     component: () => import('@/modules/rehab/views/RehabReminderPage.vue'),
     meta: { title: '训练提醒', requiresAuth: true },
+  },
+  {
+    path: '/rehab/smart-plan',
+    name: 'rehab-smart-plan',
+    component: () => import('@/modules/rehab/views/SmartPlanSetupPage.vue'),
+    meta: { title: '智能计划', requiresAuth: true },
+  },
+  {
+    path: '/rehab/weekly-progress',
+    name: 'rehab-weekly-progress',
+    component: () => import('@/modules/rehab/views/WeeklyProgressPage.vue'),
+    meta: { title: '每周记录', requiresAuth: true },
+  },
+  {
+    path: '/diet/camera',
+    name: 'diet-camera',
+    component: () => import('@/modules/diet/views/FoodCameraPage.vue'),
+    meta: { title: '拍照识热量', requiresAuth: true },
+  },
+  {
+    path: '/knowledge',
+    name: 'knowledge',
+    component: () => import('@/modules/knowledge/views/KnowledgeHubPage.vue'),
+    meta: { title: '健康知识图谱', requiresAuth: true },
+  },
+  {
+    path: '/knowledge/herbs',
+    name: 'knowledge-herbs',
+    component: () => import('@/modules/knowledge/views/HerbSearchPage.vue'),
+    meta: { title: '中药材搜索', requiresAuth: true },
+  },
+  {
+    path: '/knowledge/herbs/recognize',
+    name: 'knowledge-herbs-recognize',
+    component: () => import('@/modules/knowledge/views/HerbRecognitionPage.vue'),
+    meta: { title: '多药材识别', requiresAuth: true },
+  },
+  {
+    path: '/knowledge/formulas',
+    name: 'knowledge-formulas',
+    component: () => import('@/modules/knowledge/views/FormulaListPage.vue'),
+    meta: { title: '方剂管理', requiresAuth: true },
+  },
+  {
+    path: '/knowledge/interactions',
+    name: 'knowledge-interactions',
+    component: () => import('@/modules/knowledge/views/InteractionReportPage.vue'),
+    meta: { title: '交互报告', requiresAuth: true },
+  },
+  {
+    path: '/diet',
+    name: 'diet',
+    component: () => import('@/modules/diet/views/DietPlanPage.vue'),
+    meta: { title: '饮食推荐', requiresAuth: true },
+  },
+  {
+    path: '/diet/preferences',
+    name: 'diet-preferences',
+    component: () => import('@/modules/diet/views/DietPreferencePage.vue'),
+    meta: { title: '饮食偏好', requiresAuth: true },
+  },
+  {
+    path: '/diet/foods',
+    name: 'diet-foods',
+    component: () => import('@/modules/diet/views/FoodSearchPage.vue'),
+    meta: { title: '食材搜索', requiresAuth: true },
   },
   {
     path: '/profile',
@@ -105,6 +212,12 @@ export const routes: RouteRecordRaw[] = [
     name: 'profile-privacy',
     component: () => import('@/modules/profile/views/PrivacyCenterPage.vue'),
     meta: { title: '隐私中心', requiresAuth: true },
+  },
+  {
+    path: '/profile/data-sources',
+    name: 'profile-data-sources',
+    component: () => import('@/modules/profile/views/DataSourcesPage.vue'),
+    meta: { title: '数据来源', requiresAuth: true },
   },
   {
     path: '/profile/help',

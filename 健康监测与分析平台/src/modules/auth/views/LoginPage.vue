@@ -1,70 +1,136 @@
 <template>
-  <section class="relative min-h-dvh overflow-hidden bg-[linear-gradient(180deg,#eef4ff_0%,#eef6f1_52%,#f9fbfa_100%)] px-4 py-6 lg:px-8 lg:py-10">
-    <div class="absolute inset-0 overflow-hidden">
-      <div class="absolute left-[-8%] top-[-6%] h-52 w-52 rounded-full bg-[rgba(15,118,110,0.08)] blur-3xl lg:h-72 lg:w-72" />
-      <div class="absolute right-[-6%] top-[20%] h-44 w-44 rounded-full bg-[rgba(59,130,246,0.08)] blur-3xl lg:h-64 lg:w-64" />
-    </div>
+  <main
+    class="flex min-h-dvh flex-col items-center px-6 pb-12 pt-[120px]"
+    style="background: var(--background);"
+  >
+    <div class="flex w-full max-w-[400px] flex-col items-center">
+      <!-- Brand Logo Area -->
+      <div class="flex flex-col items-center">
+        <div
+          class="flex items-center justify-center rounded-full"
+          style="width: 72px; height: 72px; background: var(--brand-500); color: var(--primary-foreground);"
+        >
+          <iconify-icon icon="solar:heart-pulse-bold-duotone" width="36" height="36" />
+        </div>
+        <h1
+          class="mt-4 text-center text-[24px] font-semibold tracking-[-0.02em]"
+          style="color: var(--foreground);"
+        >健康监测</h1>
+        <p class="mt-1 text-center text-[14px]" style="color: var(--muted-foreground);">守护您的每一天</p>
+      </div>
 
-    <div class="relative mx-auto flex min-h-[calc(100dvh-3rem)] w-full max-w-[1080px] items-center justify-center">
-      <div class="mx-auto w-full max-w-[420px]">
-        <div class="rounded-[2rem] border border-white/80 bg-white/92 p-5 shadow-[0_30px_90px_rgba(15,23,42,0.12)] backdrop-blur lg:p-7">
-          <div class="rounded-[1.6rem] bg-[linear-gradient(180deg,#f9fbfb_0%,#eef4f1_100%)] px-5 py-5">
-            <p class="text-center text-sm font-medium text-[color:var(--accent-strong)]">康复智伴</p>
-          </div>
+      <!-- Form Card -->
+      <div
+        class="mt-12 w-full rounded-[19.2px] border p-6"
+        style="background: var(--card); border-color: var(--border); box-shadow: var(--shadow-sm);"
+      >
+        <!-- Email Input Group -->
+        <div>
+          <label
+            for="email-input"
+            class="mb-1.5 block text-[13px] font-medium"
+            style="color: var(--muted-foreground);"
+          >邮箱</label>
+          <input
+            id="email-input"
+            v-model="email"
+            type="email"
+            placeholder="请输入邮箱地址"
+            class="w-full rounded-[12px] border outline-none transition placeholder:opacity-100 focus:border-[color:var(--ring)] focus:outline-none focus:ring-2 focus:ring-[color:var(--ring)]"
+            style="height: 48px; background: var(--background-50); border-color: var(--border); padding: 0 16px; font-size: 15px; color: var(--foreground);"
+          />
+        </div>
 
-          <div class="mt-6 space-y-4">
-            <label class="block">
-              <span class="text-xs font-medium text-slate-500">邮箱</span>
-              <input
-                v-model="email"
-                class="mt-1.5 w-full rounded-[1.15rem] border border-slate-200 bg-[#fbfcfc] px-4 py-3.5 text-sm outline-none transition focus:border-[color:var(--accent-strong)] focus:bg-white"
-                type="email"
-                placeholder="请输入邮箱"
+        <!-- Password Input Group -->
+        <div class="mt-4">
+          <label
+            for="password-input"
+            class="mb-1.5 block text-[13px] font-medium"
+            style="color: var(--muted-foreground);"
+          >密码</label>
+          <div class="relative">
+            <input
+              id="password-input"
+              v-model="password"
+              :type="showPassword ? 'text' : 'password'"
+              placeholder="请输入密码"
+              class="w-full rounded-[12px] border outline-none transition placeholder:opacity-100 focus:border-[color:var(--ring)] focus:outline-none focus:ring-2 focus:ring-[color:var(--ring)]"
+              style="height: 48px; background: var(--background-50); border-color: var(--border); padding: 0 48px 0 16px; font-size: 15px; color: var(--foreground);"
+              @keyup.enter="handleLogin"
+            />
+            <button
+              type="button"
+              class="absolute flex items-center justify-center"
+              style="right: 12px; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; color: var(--muted-foreground);"
+              aria-label="显示或隐藏密码"
+              @click="showPassword = !showPassword"
+            >
+              <iconify-icon
+                :icon="showPassword ? 'solar:eye-closed-outline' : 'solar:eye-outline'"
+                width="20"
+                height="20"
               />
-            </label>
-
-            <label class="block">
-              <span class="text-xs font-medium text-slate-500">密码</span>
-              <input
-                v-model="password"
-                class="mt-1.5 w-full rounded-[1.15rem] border border-slate-200 bg-[#fbfcfc] px-4 py-3.5 text-sm outline-none transition focus:border-[color:var(--accent-strong)] focus:bg-white"
-                type="password"
-                placeholder="请输入密码"
-              />
-            </label>
-
-            <Button class="mt-2 w-full" :loading="submitting" @click="handleLogin">登录</Button>
-          </div>
-
-          <div class="mt-5 rounded-[1.25rem] border border-[rgba(15,23,42,0.06)] bg-white px-4 py-4">
-            <p class="text-center text-sm text-slate-600">
-              还没有账号？
-              <RouterLink class="font-semibold text-slate-950" to="/auth/register">立即注册</RouterLink>
-            </p>
+            </button>
           </div>
         </div>
       </div>
+
+      <!-- Login Button -->
+      <button
+        type="button"
+        class="mt-6 flex w-full items-center justify-center rounded-full transition active:scale-[0.98] disabled:opacity-60"
+        style="background: var(--primary); color: var(--primary-foreground); height: 52px; font-size: 17px; font-weight: 600;"
+        :disabled="submitting"
+        @click="handleLogin"
+      >
+        {{ submitting ? '登录中…' : '登录' }}
+      </button>
+
+      <!-- Secondary Links -->
+      <div class="mt-5 flex w-full justify-between">
+        <button
+          type="button"
+          class="text-[14px] transition active:opacity-70"
+          style="color: var(--brand-500);"
+          @click="forgotPassword"
+        >忘记密码?</button>
+        <RouterLink
+          class="text-[14px] transition active:opacity-70"
+          style="color: var(--brand-500);"
+          to="/auth/register"
+        >注册账号</RouterLink>
+      </div>
+
+      <!-- Footer Text -->
+      <p
+        class="mt-12 text-center text-[12px] leading-relaxed"
+        style="color: var(--muted-foreground);"
+      >登录即代表您同意《用户协议》和《隐私政策》</p>
     </div>
-  </section>
+  </main>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useToast } from '@/composables/useToast'
-import Button from '@/shared/components/ui/Button.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
-const { success, error } = useToast()
+const { success, error, warning } = useToast()
 
 const email = ref('')
 const password = ref('')
+const showPassword = ref(false)
 const submitting = ref(false)
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const forgotPassword = () => {
+  warning('请联系管理员重置密码', '当前版本暂不支持自助找回。')
+}
 
 const handleLogin = async () => {
   const nextEmail = email.value.trim()

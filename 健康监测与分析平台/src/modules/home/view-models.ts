@@ -65,9 +65,21 @@ export function toPlanActions(_summary: HomeSummary | null, _rehabPlan: RehabPla
     },
     {
       key: 'medication',
-      title: '用药提醒',
+      title: '用药管理',
       route: '/medication',
       icon: 'solar:pills-3-outline',
+    },
+    {
+      key: 'diet',
+      title: '饮食推荐',
+      route: '/diet',
+      icon: 'solar:salad-outline',
+    },
+    {
+      key: 'knowledge',
+      title: '健康知识',
+      route: '/knowledge',
+      icon: 'solar:library-outline',
     },
   ]
 }

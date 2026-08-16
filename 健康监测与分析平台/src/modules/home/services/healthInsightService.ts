@@ -1,6 +1,6 @@
 import type { AppleHealthSnapshot } from '@/modules/home/services/appleHealthBridge'
 
-export type RiskLevel = 'low' | 'medium' | 'high'
+export type RiskLevel = 'low' | 'medium' | 'high' | 'unknown'
 
 type ScoreInput = {
   heartRate?: number | null
@@ -27,6 +27,7 @@ export type HealthCategoryInsight = {
   weight: number
   hint: string
   recommendations: string[]
+  dataAvailable: boolean
 }
 
 export type HealthInsight = {
@@ -37,6 +38,8 @@ export type HealthInsight = {
   recommendations: string[]
   consultQuestion: string
   consultChips: string[]
+  dataQuality: 'none' | 'partial' | 'complete'
+  dataWarnings: string[]
 }
 
 const WEIGHTS = {
@@ -63,7 +66,8 @@ function riskFromScore(score: number): RiskLevel {
 function riskLabel(risk: RiskLevel): string {
   if (risk === 'low') return '低风险'
   if (risk === 'medium') return '中风险'
-  return '高风险'
+  if (risk === 'high') return '高风险'
+  return '数据不足'
 }
 
 function limitText(value: string, maxLength: number): string {
@@ -178,7 +182,7 @@ function scoreHRV(ms?: number | null): number | null {
 }
 
 function riskForBloodPressure(systolic?: number | null, diastolic?: number | null): RiskLevel {
-  if (systolic == null || diastolic == null) return 'low'
+  if (systolic == null || diastolic == null) return 'unknown'
   if (systolic > 160 || diastolic > 100) return 'high'
   if (systolic > 140 || diastolic > 90) return 'high'
   if (systolic > 135 || diastolic > 85) return 'medium'
@@ -224,6 +228,7 @@ function sleepRecommendation(score: number): string[] {
 }
 
 function bpRecommendation(risk: RiskLevel): string[] {
+  if (risk === 'unknown') return ['暂未读取到完整血压数据，先完成测量后再给出个性化建议。']
   if (risk === 'low') return ['血压处于相对稳定区间，建议继续监测并保持规律活动。']
   if (risk === 'medium') return ['建议减少高盐饮食并关注清晨与睡前血压变化。']
   return ['血压偏高风险明显，建议尽快线下复查并记录连续数据。']
@@ -254,8 +259,9 @@ function recoveryRecommendation(score: number): string[] {
 }
 
 function topCategory(categories: HealthCategoryInsight[]): HealthCategoryInsight | null {
-  if (!categories.length) return null
-  return categories.reduce((prev, current) => (current.score < prev.score ? current : prev))
+  const available = categories.filter((item) => item.dataAvailable)
+  if (!available.length) return null
+  return available.reduce((prev, current) => (current.score < prev.score ? current : prev))
 }
 
 function riskFromOverall(score: number): RiskLevel {
@@ -275,46 +281,52 @@ export function buildHealthInsight(input: ScoreInput): HealthInsight {
   const standRaw = scoreStandHours(input.standHours)
   const hrvRaw = scoreHRV(input.hrvMillis)
 
-  const stressScore = stressRaw ?? 78
-  const sleepScore = sleepRaw ?? 76
-  const activityScore = activityRaw ?? 68
-  const bpScore = bpRaw ?? 85
-  const heartRateScore = hrScore ?? 80
-  const vo2Score = vo2Raw ?? 75
+  const observedCount = [hrScore, stressRaw, sleepRaw, activityRaw, bpRaw, vo2Raw, exerciseRaw, standRaw, hrvRaw]
+    .filter((value) => value != null).length
+  const dataQuality: HealthInsight['dataQuality'] = observedCount === 0 ? 'none' : observedCount >= 7 ? 'complete' : 'partial'
+  const stressScore = stressRaw ?? 0
+  const sleepScore = sleepRaw ?? 0
+  const activityScore = activityRaw ?? 0
+  const bpScore = bpRaw ?? 0
+  const heartRateScore = hrScore ?? 0
+  const vo2Score = vo2Raw ?? 0
   const standExerciseScore = (exerciseRaw != null && standRaw != null)
     ? Math.round(exerciseRaw * 0.6 + standRaw * 0.4)
-    : (exerciseRaw ?? standRaw ?? 70)
+    : (exerciseRaw ?? standRaw ?? 0)
   const recoveryScore = (hrvRaw != null && stressRaw != null)
     ? Math.round(hrvRaw * 0.6 + (100 - input.stress!) * 0.4)
-    : (hrvRaw ?? 72)
+    : (hrvRaw ?? 0)
 
   const categories: HealthCategoryInsight[] = [
     {
       key: 'sleep',
       label: '睡眠质量',
       score: sleepScore,
-      risk: riskForSleep(sleepScore),
+      risk: sleepRaw != null ? riskForSleep(sleepScore) : 'unknown',
       weight: WEIGHTS.sleep,
       hint: sleepScore >= 80 ? '整体睡眠质量稳定' : '睡眠恢复仍需关注',
       recommendations: sleepRecommendation(sleepScore),
+      dataAvailable: sleepRaw != null,
     },
     {
       key: 'stress',
       label: '压力负荷',
       score: stressScore,
-      risk: riskForStress(stressScore),
+      risk: stressRaw != null ? riskForStress(stressScore) : 'unknown',
       weight: WEIGHTS.stress,
       hint: stressScore >= 70 ? '压力状态可控' : '压力波动偏高',
       recommendations: stressRecommendation(stressScore),
+      dataAvailable: stressRaw != null,
     },
     {
       key: 'heartRate',
       label: '静息心率',
       score: heartRateScore,
-      risk: riskFromScore(heartRateScore),
+      risk: hrScore != null ? riskFromScore(heartRateScore) : 'unknown',
       weight: WEIGHTS.heartRate,
       hint: input.heartRate ? `${input.heartRate} bpm` : '暂无最新心率',
       recommendations: heartRateRecommendation(heartRateScore, input.heartRate),
+      dataAvailable: hrScore != null,
     },
     {
       key: 'bloodPressure',
@@ -324,63 +336,70 @@ export function buildHealthInsight(input: ScoreInput): HealthInsight {
       weight: WEIGHTS.bloodPressure,
       hint: input.systolic && input.diastolic ? `${input.systolic}/${input.diastolic} mmHg` : '未读取到血压数据',
       recommendations: bpRecommendation(riskForBloodPressure(input.systolic, input.diastolic)),
+      dataAvailable: bpRaw != null,
     },
     {
       key: 'activity',
       label: '步行活动',
       score: activityScore,
-      risk: riskForActivity(activityScore),
+      risk: activityRaw != null ? riskForActivity(activityScore) : 'unknown',
       weight: WEIGHTS.activity,
       hint: input.steps ? `${Math.round(input.steps)} 步` : '今日活动量待补充',
       recommendations: activityRecommendation(activityScore),
+      dataAvailable: activityRaw != null,
     },
     {
       key: 'vo2Max',
       label: '最大摄氧量',
       score: vo2Score,
-      risk: riskFromScore(vo2Score),
+      risk: vo2Raw != null ? riskFromScore(vo2Score) : 'unknown',
       weight: WEIGHTS.vo2Max,
       hint: input.vo2Max ? `${input.vo2Max} ml/kg/min` : '暂无 VO2Max 数据',
       recommendations: vo2MaxRecommendation(vo2Score),
+      dataAvailable: vo2Raw != null,
     },
     {
       key: 'standAndExercise',
       label: '站立与锻炼',
       score: standExerciseScore,
-      risk: riskForActivity(standExerciseScore),
+      risk: exerciseRaw != null || standRaw != null ? riskForActivity(standExerciseScore) : 'unknown',
       weight: WEIGHTS.standAndExercise,
       hint: [
         input.standHours ? `站立 ${input.standHours}h` : '',
         input.exerciseMinutes ? `锻炼 ${input.exerciseMinutes}min` : '',
       ].filter(Boolean).join('，') || '暂无站立/锻炼数据',
       recommendations: standExerciseRecommendation(standExerciseScore),
+      dataAvailable: exerciseRaw != null || standRaw != null,
     },
     {
       key: 'recovery',
       label: '恢复状态',
       score: recoveryScore,
-      risk: riskFromScore(recoveryScore),
+      risk: hrvRaw != null || stressRaw != null ? riskFromScore(recoveryScore) : 'unknown',
       weight: WEIGHTS.recovery,
       hint: input.hrvMillis ? `HRV ${input.hrvMillis}ms` : '暂无 HRV 数据',
       recommendations: recoveryRecommendation(recoveryScore),
+      dataAvailable: hrvRaw != null || stressRaw != null,
     },
   ]
 
-  const overallScore = clamp(
-    Math.round(
-      categories.reduce((sum, item) => sum + item.score * item.weight, 0)
-    ),
-    0,
-    100,
-  )
+  const availableCategories = categories.filter((item) => item.dataAvailable)
+  const availableWeight = availableCategories.reduce((sum, item) => sum + item.weight, 0)
+  const overallScore = availableWeight > 0
+    ? clamp(Math.round(availableCategories.reduce((sum, item) => sum + item.score * item.weight, 0) / availableWeight), 0, 100)
+    : 0
 
-  const riskOrder: Record<RiskLevel, number> = { low: 0, medium: 1, high: 2 }
-  const overallRisk = categories.reduce<RiskLevel>((risk, item) => {
-    return riskOrder[item.risk] > riskOrder[risk] ? item.risk : risk
-  }, riskFromOverall(overallScore))
+  const riskOrder: Record<RiskLevel, number> = { unknown: -1, low: 0, medium: 1, high: 2 }
+  const overallRisk = availableCategories.length === 0
+    ? 'unknown'
+    : availableCategories.reduce<RiskLevel>((risk, item) => {
+      return riskOrder[item.risk] > riskOrder[risk] ? item.risk : risk
+    }, riskFromOverall(overallScore))
 
   const weak = topCategory(categories)
-  const summary = weak
+  const summary = dataQuality === 'none'
+    ? '暂无足够的健康监测数据，暂不生成综合评分。'
+    : weak
     ? `综合健康评分 ${overallScore}，当前主要风险点在${weak.label}。${weak.hint}。`
     : `综合健康评分 ${overallScore}，整体状态相对稳定。`
 
@@ -390,9 +409,13 @@ export function buildHealthInsight(input: ScoreInput): HealthInsight {
     .slice(0, 5)
 
   const fallbackRecommendations = categories.flatMap((item) => item.recommendations).slice(0, 4)
-  const finalRecommendations = recommendations.length ? recommendations : fallbackRecommendations
+  const finalRecommendations = dataQuality === 'none'
+    ? ['先同步 Apple Health 或智能穿戴数据，再生成个性化建议。']
+    : recommendations.length ? recommendations : fallbackRecommendations
 
-  const consultQuestion = weak
+  const consultQuestion = dataQuality === 'none'
+    ? '我还没有可用的健康监测数据，请告诉我需要先同步哪些数据。'
+    : weak
     ? `基于我当前 ${overallScore} 分的健康状态，${weak.label}评分 ${weak.score}，请给出今晚到明天的改善建议。`
     : `基于我当前 ${overallScore} 分的健康状态，请给出今晚到明天的改善建议。`
 
@@ -410,6 +433,10 @@ export function buildHealthInsight(input: ScoreInput): HealthInsight {
     recommendations: finalRecommendations,
     consultQuestion,
     consultChips,
+    dataQuality,
+    dataWarnings: dataQuality === 'complete'
+      ? []
+      : ['部分健康指标缺失，当前评分仅供数据完整性提示，不应视为医学结论。'],
   }
 }
 
@@ -450,16 +477,16 @@ export function buildInsightFromMonitor(latest: {
   hrvMillis?: number
 }): HealthInsight {
   return buildHealthInsight({
-    heartRate: latest.hr,
-    stress: latest.stress,
-    sleep: latest.sleep,
-    steps: latest.stepsNow ?? null,
-    vo2Max: latest.vo2Max ?? null,
-    exerciseMinutes: latest.exerciseMinutes ?? null,
-    standHours: latest.standHours ?? null,
-    activeEnergyKcal: latest.activeEnergyKcal ?? null,
-    flightsClimbed: latest.flightsClimbed ?? null,
-    hrvMillis: latest.hrvMillis ?? null,
+    heartRate: latest.hr > 0 ? latest.hr : null,
+    stress: latest.stress > 0 ? latest.stress : null,
+    sleep: latest.sleep > 0 ? latest.sleep : null,
+    steps: latest.stepsNow && latest.stepsNow > 0 ? latest.stepsNow : null,
+    vo2Max: latest.vo2Max && latest.vo2Max > 0 ? latest.vo2Max : null,
+    exerciseMinutes: latest.exerciseMinutes && latest.exerciseMinutes > 0 ? latest.exerciseMinutes : null,
+    standHours: latest.standHours && latest.standHours > 0 ? latest.standHours : null,
+    activeEnergyKcal: latest.activeEnergyKcal && latest.activeEnergyKcal > 0 ? latest.activeEnergyKcal : null,
+    flightsClimbed: latest.flightsClimbed && latest.flightsClimbed > 0 ? latest.flightsClimbed : null,
+    hrvMillis: latest.hrvMillis && latest.hrvMillis > 0 ? latest.hrvMillis : null,
   })
 }
 
@@ -473,12 +500,13 @@ export function quickConsultFromInsight(insight: HealthInsight, scene: string): 
 
 export function riskBadgeVariant(risk: RiskLevel): 'success' | 'warning' | 'danger' {
   if (risk === 'low') return 'success'
-  if (risk === 'medium') return 'warning'
+  if (risk === 'medium' || risk === 'unknown') return 'warning'
   return 'danger'
 }
 
 export function riskBadgeText(risk: RiskLevel): string {
   if (risk === 'low') return '总体稳定'
   if (risk === 'medium') return '需关注'
+  if (risk === 'unknown') return '数据不足'
   return '高风险'
 }

@@ -1,6 +1,7 @@
 package com.ahealth.backend.monitor;
 
 import com.ahealth.backend.common.ApiException;
+import com.ahealth.backend.common.CurrentUser;
 import com.ahealth.backend.common.TimeFormats;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -21,14 +22,16 @@ public class MonitorService {
   }
 
   public MonitorDtos.MonitorLatestResponse getLatest() {
+    long userId = CurrentUser.requireUserId();
     List<MonitorDtos.MonitorLatestResponse> rows = jdbcTemplate.query(
         """
         SELECT recorded_at, hr, sleep_score, deep_sleep_hours, awake_times, stress_score
-        FROM monitor_records
+        FROM monitor_records WHERE user_id = ?
         ORDER BY recorded_at DESC
         LIMIT 1
         """,
-        (rs, rowNum) -> mapLatest(rs)
+        (rs, rowNum) -> mapLatest(rs),
+        userId
     );
 
     if (rows.isEmpty()) {
@@ -38,6 +41,7 @@ public class MonitorService {
   }
 
   public MonitorDtos.MonitorTrendResponse getTrend(String metric, String range) {
+    long userId = CurrentUser.requireUserId();
     String metricColumn = resolveMetricColumn(metric);
     RangeConfig rangeConfig = resolveRangeConfig(range);
     String sql = """
@@ -45,12 +49,12 @@ public class MonitorService {
                ROUND(AVG(%s), 0) AS value,
                MIN(recorded_at) AS sort_time
         FROM monitor_records
-        WHERE %s
+        WHERE user_id = ? AND %s
         GROUP BY label
         ORDER BY sort_time ASC
         """.formatted(rangeConfig.format(), metricColumn, rangeConfig.whereClause());
 
-    List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
+    List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, userId);
     List<String> labels = new ArrayList<>();
     List<Integer> values = new ArrayList<>();
     for (Map<String, Object> row : rows) {
@@ -89,6 +93,7 @@ public class MonitorService {
 
   private RangeConfig resolveRangeConfig(String range) {
     return switch (range) {
+      case "minute" -> new RangeConfig("recorded_at >= DATE_SUB(NOW(), INTERVAL 60 MINUTE)", "%H:%i");
       case "hour" -> new RangeConfig("recorded_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)", "%H:%i");
       case "day" -> new RangeConfig("recorded_at >= DATE_SUB(CURDATE(), INTERVAL 13 DAY)", "%m-%d");
       case "month" -> new RangeConfig("recorded_at >= DATE_SUB(CURDATE(), INTERVAL 11 MONTH)", "%Y-%m");

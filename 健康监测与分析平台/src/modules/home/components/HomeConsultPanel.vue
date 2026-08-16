@@ -9,30 +9,28 @@
     />
 
     <div class="mt-3 flex flex-wrap gap-2">
-      <v-chip
+      <button
         v-for="chip in chips"
         :key="chip"
-        variant="outlined"
-        size="small"
-        label
-        clickable
+        type="button"
+        class="rounded-full border border-[color:var(--surface-border)] bg-transparent px-3 py-1 text-xs text-slate-700 transition hover:bg-white active:scale-[0.98]"
         @click="$emit('pick-chip', chip)"
       >
         {{ chip }}
-      </v-chip>
+      </button>
     </div>
 
     <div class="mt-4 flex justify-end">
-      <v-btn
-        color="primary"
-        :loading="loading"
-        :disabled="!question.trim()"
-        rounded="lg"
+      <button
+        type="button"
+        class="inline-flex items-center rounded-lg bg-[color:var(--accent-strong)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+        :disabled="loading || !question.trim()"
+        :aria-busy="loading"
         @click="$emit('submit')"
       >
         <iconify-icon icon="solar:chat-round-line-outline" width="16" height="16" class="mr-1" />
-        获取建议
-      </v-btn>
+        {{ loading ? '生成中…' : '获取建议' }}
+      </button>
     </div>
 
     <div

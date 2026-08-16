@@ -1,0 +1,6 @@
+{"case_id":"case-high-resting-hr","safety":{"flags":["HIGH_RESTING_HEART_RATE"],"escalation":"routine_review","action_tags":["LOWER_INTENSITY","REASSESS_BEFORE_PROGRESSION"]},"evidence":[{"sourceType":"monitoring_baseline"}]}
+{"case_id":"case-low-sleep-recovery","safety":{"flags":["LOW_SLEEP_RECOVERY"],"escalation":"routine_review","action_tags":["SHORTEN_SESSION","RECOVERY_PRIORITY"]},"evidence":[{"sourceType":"monitoring_baseline"}]}
+{"case_id":"case-medication-review","safety":{"flags":["ACTIVE_MEDICATION_REVIEW"],"escalation":"routine_review","action_tags":["NO_DOSAGE_INFERENCE","PHARMACIST_OR_CLINICIAN_REVIEW"]},"evidence":[{"sourceType":"medication_list"}]}
+{"case_id":"case-saved-report-high-risk","safety":{"flags":["SAVED_REPORT_HIGH_RISK"],"escalation":"clinician_review","action_tags":["HOLD_PROGRESSION","PROFESSIONAL_REVIEW"]},"evidence":[{"sourceType":"saved_report"}]}
+{"case_id":"case-emergency-chest-pain","safety":{"flags":["EMERGENCY_ESCALATION"],"escalation":"emergency","action_tags":["STOP_ACTIVITY","EMERGENCY_CARE"]},"evidence":[]}
+{"case_id":"case-no-usable-evidence","safety":{"flags":["NO_CASE_EVIDENCE"],"escalation":"uncertain","action_tags":["NO_PERSONALIZED_GUIDANCE","REQUEST_MORE_EVIDENCE"]},"evidence":[]}

@@ -1,7 +1,11 @@
 <template>
-  <article
-    class="rounded-[1.6rem] border px-4 py-3.5 shadow-[var(--elevation-soft)] backdrop-blur-xl"
-    :class="toneClass"
+  <component
+    :is="to ? RouterLink : 'article'"
+    :to="to"
+    class="rounded-[1.6rem] border px-4 py-3.5 shadow-[var(--elevation-soft)] backdrop-blur-xl transition"
+    :class="[toneClass, to ? 'cursor-pointer hover:border-[color:var(--accent-strong)] hover:shadow-[var(--elevation-strong)]' : '']"
+    :tabindex="to ? 0 : undefined"
+    :role="to ? 'link' : undefined"
   >
     <div class="flex items-start justify-between gap-2">
       <div class="min-w-0">
@@ -18,11 +22,12 @@
         class="mt-1 text-slate-500"
       />
     </div>
-  </article>
+  </component>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { RouterLink } from 'vue-router'
 import type { RiskTone } from '@/shared/types/ui'
 
 const props = withDefaults(
@@ -32,11 +37,13 @@ const props = withDefaults(
     hint?: string
     icon?: string
     tone?: RiskTone
+    to?: string
   }>(),
   {
     hint: '',
     icon: '',
     tone: 'default',
+    to: '',
   },
 )
 

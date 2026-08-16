@@ -122,15 +122,12 @@ describe('RehabPage', () => {
     mockGetRehabPlanSettings.mockResolvedValue(rehabPlanFixture.planSummary)
   })
 
-  it('renders the feature nav bar and returns to home', async () => {
-    const { router } = await renderPage()
+  it('renders the Apple-style rehab header and plan actions', async () => {
+    await renderPage()
 
-    expect(screen.getByRole('navigation', { name: '功能页导航' })).toBeInTheDocument()
-    expect(screen.getAllByText('康复训练').length).toBeGreaterThan(0)
-
-    await fireEvent.click(screen.getByRole('button', { name: '返回' }))
-
-    await waitFor(() => expect(router.currentRoute.value.fullPath).toBe('/home'))
+    expect(screen.getByRole('heading', { name: '康复训练' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '调整' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '智能计划' })).toBeInTheDocument()
   })
 
   it('renders rehab summary and supports marking exercise done', async () => {
@@ -160,7 +157,7 @@ describe('RehabPage', () => {
     await renderPage()
     await screen.findByText('训练计划')
 
-    await fireEvent.click(screen.getAllByRole('button', { name: '设置计划' })[0])
+    await fireEvent.click(screen.getByRole('button', { name: '调整' }))
     await fireEvent.update(screen.getByDisplayValue('核心稳定'), '姿势修复')
     await fireEvent.click(screen.getByRole('button', { name: '保存' }))
 

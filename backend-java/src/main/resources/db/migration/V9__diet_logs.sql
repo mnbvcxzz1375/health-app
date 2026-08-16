@@ -1,0 +1,14 @@
+CREATE TABLE IF NOT EXISTS diet_logs (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT NOT NULL,
+  food_name VARCHAR(120) NOT NULL,
+  category VARCHAR(64),
+  weight_grams DECIMAL(8,2) NOT NULL DEFAULT 0,
+  calories DECIMAL(8,2) NOT NULL DEFAULT 0,
+  protein_g DECIMAL(8,2) NOT NULL DEFAULT 0,
+  carbs_g DECIMAL(8,2) NOT NULL DEFAULT 0,
+  fat_g DECIMAL(8,2) NOT NULL DEFAULT 0,
+  source VARCHAR(64),
+  recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_diet_logs_user_time (user_id, recorded_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
